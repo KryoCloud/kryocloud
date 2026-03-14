@@ -3,19 +3,13 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>eu.kryocloud</groupId>
+        <artifactId>kryocloud-parent</artifactId>
+        <version>1.0.0-alpha.1</version>
+    </parent>
 
-    <groupId>eu.kryocloud</groupId>
-    <artifactId>kryocloud-parent</artifactId>
-    <version>1.0.0-alpha.1</version>
-
-    <packaging>pom</packaging>
-    <modules>
-        <module>kryocloud-api</module>
-        <module>kryocloud-common</module>
-        <module>kryocloud-node</module>
-        <module>kryocloud-network</module>
-        <module>kryocloud-launcher</module>
-    </modules>
+    <artifactId>kryocloud-launcher</artifactId>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
