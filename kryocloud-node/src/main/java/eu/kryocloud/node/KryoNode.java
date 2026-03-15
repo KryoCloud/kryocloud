@@ -6,7 +6,7 @@ import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.api.node.INode;
 import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.api.template.ITemplateManager;
-import eu.kryocloud.node.config.ConfigProvider;
+import eu.kryocloud.common.config.ConfigProvider;
 import eu.kryocloud.node.database.DatabaseProvider;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.ServiceManager;
