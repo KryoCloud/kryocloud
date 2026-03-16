@@ -23,11 +23,6 @@
             <artifactId>kryocloud-common</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-            <version>4.2.10.Final</version>
-        </dependency>
     </dependencies>
 
 </project>

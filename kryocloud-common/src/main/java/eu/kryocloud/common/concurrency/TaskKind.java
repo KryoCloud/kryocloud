@@ -1,4 +1,7 @@
 package eu.kryocloud.common.concurrency;
 
-public class TaskKind {
+public enum TaskKind {
+    CPU_BOUND,
+    BLOCKING_IO,
+    BACKGROUND
 }
