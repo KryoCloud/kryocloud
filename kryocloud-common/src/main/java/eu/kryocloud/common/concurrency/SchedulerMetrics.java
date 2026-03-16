@@ -70,13 +70,33 @@ public final class SchedulerMetrics {
         totalExecNanos.get(kind).add(result.executionDuration().toNanos());
     }
 
-    public long submitted(TaskKind kind) { return submitted.get(kind).sum(); }
-    public long started(TaskKind kind) { return started.get(kind).sum(); }
-    public long completed(TaskKind kind) { return completed.get(kind).sum(); }
-    public long failed(TaskKind kind) { return failed.get(kind).sum(); }
-    public long timedOut(TaskKind kind) { return timedOut.get(kind).sum(); }
-    public long cancelled(TaskKind kind) { return cancelled.get(kind).sum(); }
-    public long rejected(TaskKind kind) { return rejected.get(kind).sum(); }
+    public long submitted(TaskKind kind) {
+        return submitted.get(kind).sum();
+    }
+
+    public long started(TaskKind kind) {
+        return started.get(kind).sum();
+    }
+
+    public long completed(TaskKind kind) {
+        return completed.get(kind).sum();
+    }
+
+    public long failed(TaskKind kind) {
+        return failed.get(kind).sum();
+    }
+
+    public long timedOut(TaskKind kind) {
+        return timedOut.get(kind).sum();
+    }
+
+    public long cancelled(TaskKind kind) {
+        return cancelled.get(kind).sum();
+    }
+
+    public long rejected(TaskKind kind) {
+        return rejected.get(kind).sum();
+    }
 
     public Duration avgQueueDuration(TaskKind kind) {
         long count = completed.get(kind).sum();

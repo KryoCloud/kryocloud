@@ -20,15 +20,11 @@ public final class NettyOffloader {
         this.scheduler = Objects.requireNonNull(scheduler);
     }
 
-    public <T> ScheduledTask<T> offload(TaskKind kind, ChannelHandlerContext ctx,
-                                        Supplier<T> work, Consumer<T> onResult) {
+    public <T> ScheduledTask<T> offload(TaskKind kind, ChannelHandlerContext ctx, Supplier<T> work, Consumer<T> onResult) {
         return offload(kind, null, TaskPriority.NORMAL, null, ctx, work, onResult);
     }
 
-    public <T> ScheduledTask<T> offload(TaskKind kind, String name,
-                                        TaskPriority priority, Duration timeout,
-                                        ChannelHandlerContext ctx,
-                                        Supplier<T> work, Consumer<T> onResult) {
+    public <T> ScheduledTask<T> offload(TaskKind kind, String name, TaskPriority priority, Duration timeout, ChannelHandlerContext ctx, Supplier<T> work, Consumer<T> onResult) {
         EventLoop eventLoop = ctx.channel().eventLoop();
 
         ScheduledTask<T> task = scheduler.submit(kind, name, priority, timeout, work);
@@ -41,18 +37,15 @@ public final class NettyOffloader {
         return task;
     }
 
-    public <T> ScheduledTask<T> offloadIO(ChannelHandlerContext ctx,
-                                          Supplier<T> work, Consumer<T> onResult) {
+    public <T> ScheduledTask<T> offloadIO(ChannelHandlerContext ctx, Supplier<T> work, Consumer<T> onResult) {
         return offload(TaskKind.BLOCKING_IO, ctx, work, onResult);
     }
 
-    public <T> ScheduledTask<T> offloadCpu(ChannelHandlerContext ctx,
-                                           Supplier<T> work, Consumer<T> onResult) {
+    public <T> ScheduledTask<T> offloadCpu(ChannelHandlerContext ctx, Supplier<T> work, Consumer<T> onResult) {
         return offload(TaskKind.CPU_BOUND, ctx, work, onResult);
     }
 
-    public ScheduledTask<Void> offloadFire(TaskKind kind, ChannelHandlerContext ctx,
-                                           Runnable work) {
+    public ScheduledTask<Void> offloadFire(TaskKind kind, ChannelHandlerContext ctx, Runnable work) {
         return offload(kind, ctx, () -> {
             work.run();
             return null;

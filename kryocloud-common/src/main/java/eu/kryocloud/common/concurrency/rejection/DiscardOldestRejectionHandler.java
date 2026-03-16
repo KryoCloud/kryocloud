@@ -22,20 +22,15 @@ public final class DiscardOldestRejectionHandler implements SchedulerRejectionHa
         Runnable evicted = queue.pollHead();
 
         if (evicted != null) {
-            LOG.log(Level.WARNING,
-                    "DISCARD_OLDEST: evicted head element to make room for task: {0}", taskName);
+            LOG.log(Level.WARNING, "DISCARD_OLDEST: evicted head element to make room for task: {0}", taskName);
         }
 
         boolean inserted = queue.offer(task);
 
         if (!inserted) {
-            TaskRejectedException ex = new TaskRejectedException(
-                    taskName,
-                    "queue full even after evicting head, policy=DISCARD_OLDEST"
-            );
+            TaskRejectedException ex = new TaskRejectedException(taskName, "queue full even after evicting head, policy=DISCARD_OLDEST");
             future.completeExceptionally(ex);
-            LOG.log(Level.WARNING,
-                    "DISCARD_OLDEST: still no room after eviction for task: {0}", taskName);
+            LOG.log(Level.WARNING, "DISCARD_OLDEST: still no room after eviction for task: {0}", taskName);
         }
     }
 }

@@ -1,10 +1,7 @@
 package eu.kryocloud.common.concurrency;
 
 public enum TaskPriority {
-    LOW(0),
-    NORMAL(5),
-    HIGH(10),
-    CRITICAL(15);
+    LOW(0), NORMAL(5), HIGH(10), CRITICAL(15);
 
     private final int weight;
 

@@ -1,6 +1,8 @@
 package eu.kryocloud.common.concurrency;
 
-import eu.kryocloud.common.concurrency.exception.*;
+import eu.kryocloud.common.concurrency.exception.SchedulerShutdownException;
+import eu.kryocloud.common.concurrency.exception.TaskRejectedException;
+import eu.kryocloud.common.concurrency.exception.TaskTimeoutException;
 import eu.kryocloud.common.concurrency.rejection.*;
 
 import java.time.Duration;
@@ -46,42 +48,22 @@ public final class CloudScheduler implements AutoCloseable {
         this.config = Objects.requireNonNull(config);
         this.metrics = new SchedulerMetrics(config.metricsEnabled());
 
-        this.cpuQueue = new BoundedPriorityQueue<>(
-                config.maxQueuedTasksPerPool(), PRIORITY_COMPARATOR);
+        this.cpuQueue = new BoundedPriorityQueue<>(config.maxQueuedTasksPerPool(), PRIORITY_COMPARATOR);
 
-        this.bgQueue = new BoundedPriorityQueue<>(
-                config.maxQueuedTasksPerPool(), PRIORITY_COMPARATOR);
+        this.bgQueue = new BoundedPriorityQueue<>(config.maxQueuedTasksPerPool(), PRIORITY_COMPARATOR);
 
         this.cpuRejectionHandler = createRejectionHandler(config.rejectionPolicy(), cpuQueue, config);
         this.bgRejectionHandler = createRejectionHandler(config.rejectionPolicy(), bgQueue, config);
 
-        Thread.UncaughtExceptionHandler uncaughtHandler = (thread, throwable) ->
-                LOG.log(Level.SEVERE, "Uncaught exception in thread " + thread.getName(), throwable);
+        Thread.UncaughtExceptionHandler uncaughtHandler = (thread, throwable) -> LOG.log(Level.SEVERE, "Uncaught exception in thread " + thread.getName(), throwable);
 
-        this.cpuPool = new ThreadPoolExecutor(
-                config.cpuPoolSize(), config.cpuPoolSize(),
-                0L, TimeUnit.MILLISECONDS,
-                cpuQueue,
-                Thread.ofPlatform()
-                        .name("kryocloud-cpu-", 0)
-                        .uncaughtExceptionHandler(uncaughtHandler)
-                        .factory(),
-                new ThreadPoolExecutor.AbortPolicy()
-        );
+        this.cpuPool = new ThreadPoolExecutor(config.cpuPoolSize(), config.cpuPoolSize(), 0L, TimeUnit.MILLISECONDS, cpuQueue, Thread.ofPlatform().name("kryocloud-cpu-", 0).uncaughtExceptionHandler(uncaughtHandler).factory(), new ThreadPoolExecutor.AbortPolicy());
 
         this.ioPool = Executors.newVirtualThreadPerTaskExecutor();
 
-        this.backgroundPool = new ThreadPoolExecutor(
-                config.backgroundPoolSize(), config.backgroundPoolSize(),
-                0L, TimeUnit.MILLISECONDS,
-                bgQueue,
-                Thread.ofPlatform().name("kryocloud-bg-", 0).daemon(true).priority(Thread.MIN_PRIORITY).uncaughtExceptionHandler(uncaughtHandler).factory(),
-                new ThreadPoolExecutor.AbortPolicy()
-        );
+        this.backgroundPool = new ThreadPoolExecutor(config.backgroundPoolSize(), config.backgroundPoolSize(), 0L, TimeUnit.MILLISECONDS, bgQueue, Thread.ofPlatform().name("kryocloud-bg-", 0).daemon(true).priority(Thread.MIN_PRIORITY).uncaughtExceptionHandler(uncaughtHandler).factory(), new ThreadPoolExecutor.AbortPolicy());
 
-        this.timeoutWatcher = Executors.newSingleThreadScheduledExecutor(
-                Thread.ofPlatform().name("kryocloud-timeout-watcher").daemon(true).uncaughtExceptionHandler(uncaughtHandler).factory()
-        );
+        this.timeoutWatcher = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("kryocloud-timeout-watcher").daemon(true).uncaughtExceptionHandler(uncaughtHandler).factory());
     }
 
     private static SchedulerRejectionHandler createRejectionHandler(RejectionPolicy policy, BlockingQueue<Runnable> queue, SchedulerConfig config) {
@@ -105,9 +87,7 @@ public final class CloudScheduler implements AutoCloseable {
         return submit(kind, null, priority, config.defaultTimeout(), task);
     }
 
-    public <T> ScheduledTask<T> submit(TaskKind kind, String name,
-                                       TaskPriority priority, Duration timeout,
-                                       Supplier<T> task) {
+    public <T> ScheduledTask<T> submit(TaskKind kind, String name, TaskPriority priority, Duration timeout, Supplier<T> task) {
         Objects.requireNonNull(kind);
         Objects.requireNonNull(task);
 
@@ -119,8 +99,7 @@ public final class CloudScheduler implements AutoCloseable {
         TaskPriority effectivePriority = priority != null ? priority : TaskPriority.NORMAL;
 
         CompletableFuture<T> future = new CompletableFuture<>();
-        ScheduledTask<T> scheduledTask = new ScheduledTask<>(
-                name, kind, effectivePriority, effectiveTimeout, future);
+        ScheduledTask<T> scheduledTask = new ScheduledTask<>(name, kind, effectivePriority, effectiveTimeout, future);
 
         metrics.recordSubmitted(kind);
 
@@ -144,16 +123,12 @@ public final class CloudScheduler implements AutoCloseable {
             ioPool.execute(work);
         } catch (RejectedExecutionException e) {
             metrics.recordRejected(scheduledTask.kind());
-            scheduledTask.future().completeExceptionally(
-                    new TaskRejectedException(scheduledTask.name(), "I/O pool rejected"));
+            scheduledTask.future().completeExceptionally(new TaskRejectedException(scheduledTask.name(), "I/O pool rejected"));
         }
     }
 
-    private <T> void submitToBounded(ThreadPoolExecutor pool, BoundedPriorityQueue<Runnable> queue,
-                                     SchedulerRejectionHandler handler, ScheduledTask<T> scheduledTask,
-                                     Runnable work) {
-        PrioritizedRunnable prioritized = new PrioritizedRunnable(
-                scheduledTask.priority().weight(), work);
+    private <T> void submitToBounded(ThreadPoolExecutor pool, BoundedPriorityQueue<Runnable> queue, SchedulerRejectionHandler handler, ScheduledTask<T> scheduledTask, Runnable work) {
+        PrioritizedRunnable prioritized = new PrioritizedRunnable(scheduledTask.priority().weight(), work);
 
         try {
             pool.execute(prioritized);
@@ -170,9 +145,7 @@ public final class CloudScheduler implements AutoCloseable {
         });
     }
 
-    public ScheduledTask<Void> run(TaskKind kind, String name,
-                                   TaskPriority priority, Duration timeout,
-                                   Runnable task) {
+    public ScheduledTask<Void> run(TaskKind kind, String name, TaskPriority priority, Duration timeout, Runnable task) {
         return submit(kind, name, priority, timeout, () -> {
             task.run();
             return null;
@@ -194,10 +167,7 @@ public final class CloudScheduler implements AutoCloseable {
                 t.interrupt();
             }
 
-            TaskTimeoutException ex = new TaskTimeoutException(
-                    scheduledTask.id(),
-                    "Task '%s' timed out after %dms (cooperative interrupt sent)"
-                            .formatted(scheduledTask.name(), timeout.toMillis()));
+            TaskTimeoutException ex = new TaskTimeoutException(scheduledTask.id(), "Task '%s' timed out after %dms (cooperative interrupt sent)".formatted(scheduledTask.name(), timeout.toMillis()));
 
             boolean won = future.completeExceptionally(ex);
 

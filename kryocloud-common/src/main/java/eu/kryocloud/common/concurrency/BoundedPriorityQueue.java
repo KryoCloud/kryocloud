@@ -1,13 +1,6 @@
 package eu.kryocloud.common.concurrency;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.PriorityQueue;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -310,10 +303,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
         try {
             List<SequencedEntry<E>> snapshot = new ArrayList<>(delegate);
             snapshot.sort(entryComparator);
-            return snapshot.stream()
-                    .map(entry -> entry.element)
-                    .toList()
-                    .iterator();
+            return snapshot.stream().map(entry -> entry.element).toList().iterator();
         } finally {
             lock.unlock();
         }
@@ -325,9 +315,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
         try {
             List<SequencedEntry<E>> snapshot = new ArrayList<>(delegate);
             snapshot.sort(entryComparator);
-            return snapshot.stream()
-                    .map(entry -> entry.element)
-                    .toArray();
+            return snapshot.stream().map(entry -> entry.element).toArray();
         } finally {
             lock.unlock();
         }
@@ -340,9 +328,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
         try {
             List<SequencedEntry<E>> snapshot = new ArrayList<>(delegate);
             snapshot.sort(entryComparator);
-            Object[] elements = snapshot.stream()
-                    .map(entry -> entry.element)
-                    .toArray();
+            Object[] elements = snapshot.stream().map(entry -> entry.element).toArray();
             if (a.length < elements.length) {
                 return (T[]) java.util.Arrays.copyOf(elements, elements.length, a.getClass());
             }
@@ -374,5 +360,6 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
         return item;
     }
 
-    private record SequencedEntry<E>(E element, long sequence) {}
+    private record SequencedEntry<E>(E element, long sequence) {
+    }
 }

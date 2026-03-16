@@ -2,7 +2,9 @@ package eu.kryocloud.common.concurrency;
 
 import java.time.Duration;
 
-public record SchedulerConfig(int cpuPoolSize, int backgroundPoolSize, int maxQueuedTasksPerPool, Duration defaultTimeout, Duration shutdownGracePeriod, RejectionPolicy rejectionPolicy, boolean metricsEnabled, boolean callerRunsAllowedOnEventLoop) {
+public record SchedulerConfig(int cpuPoolSize, int backgroundPoolSize, int maxQueuedTasksPerPool,
+                              Duration defaultTimeout, Duration shutdownGracePeriod, RejectionPolicy rejectionPolicy,
+                              boolean metricsEnabled, boolean callerRunsAllowedOnEventLoop) {
 
     public static SchedulerConfig defaults() {
         return new SchedulerConfig(Runtime.getRuntime().availableProcessors(), 2, 1024, Duration.ofSeconds(30), Duration.ofSeconds(10), RejectionPolicy.ABORT, true, false);

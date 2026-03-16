@@ -20,8 +20,7 @@ public final class ScheduledTask<T> {
     private final AtomicReference<Instant> completedAt = new AtomicReference<>();
     private final AtomicReference<Thread> executingThread = new AtomicReference<>();
 
-    public ScheduledTask(String name, TaskKind kind, TaskPriority priority,
-                         Duration timeout, CompletableFuture<T> future) {
+    public ScheduledTask(String name, TaskKind kind, TaskPriority priority, Duration timeout, CompletableFuture<T> future) {
         this.id = UUID.randomUUID().toString();
         this.name = name != null ? name : "task-" + id.substring(0, 8);
         this.kind = kind;
@@ -31,13 +30,33 @@ public final class ScheduledTask<T> {
         this.submittedAt = Instant.now();
     }
 
-    public String id() { return id; }
-    public String name() { return name; }
-    public TaskKind kind() { return kind; }
-    public TaskPriority priority() { return priority; }
-    public Duration timeout() { return timeout; }
-    public CompletableFuture<T> future() { return future; }
-    public Instant submittedAt() { return submittedAt; }
+    public String id() {
+        return id;
+    }
+
+    public String name() {
+        return name;
+    }
+
+    public TaskKind kind() {
+        return kind;
+    }
+
+    public TaskPriority priority() {
+        return priority;
+    }
+
+    public Duration timeout() {
+        return timeout;
+    }
+
+    public CompletableFuture<T> future() {
+        return future;
+    }
+
+    public Instant submittedAt() {
+        return submittedAt;
+    }
 
     public Thread executingThread() {
         return executingThread.get();
@@ -73,19 +92,11 @@ public final class ScheduledTask<T> {
     }
 
     public TaskResult<T> toResult(T value, Throwable error, boolean timedOut) {
-        return new TaskResult<>(
-                id, name, kind, priority,
-                value, error, timedOut,
-                future.isCancelled(),
-                queueDuration(),
-                executionDuration(),
-                totalDuration()
-        );
+        return new TaskResult<>(id, name, kind, priority, value, error, timedOut, future.isCancelled(), queueDuration(), executionDuration(), totalDuration());
     }
 
     @Override
     public String toString() {
-        return "ScheduledTask{id=%s, name=%s, kind=%s, priority=%s}"
-                .formatted(id, name, kind, priority);
+        return "ScheduledTask{id=%s, name=%s, kind=%s, priority=%s}".formatted(id, name, kind, priority);
     }
 }
