@@ -5,7 +5,8 @@ import eu.kryocloud.api.config.type.IConfigTypeProvider;
 public enum ConfigType {
 
     YAML(new YamlTypeProvider(), ".yaml"),
-    TOML(new TomlTypeProvider(), ".toml");
+    TOML(new TomlTypeProvider(), ".toml"),
+    JSON(new JsonTypeProvider(), ".json");
 
     private final IConfigTypeProvider typeProvider;
     private final String ending;
