@@ -1,9 +1,9 @@
-package eu.kryocloud.network.packet.impl;
+package eu.kryocloud.network.packet.type;
 
 import eu.kryocloud.network.auth.AuthManager;
 import eu.kryocloud.network.connection.Connection;
 import eu.kryocloud.network.packet.Packet;
-import io.netty.buffer.ByteBuf;
+import eu.kryocloud.network.packet.PacketByteBuffer;
 
 public class AuthPacket extends Packet {
 
@@ -16,27 +16,29 @@ public class AuthPacket extends Packet {
     }
 
     @Override
-    public void write(ByteBuf buf) {
-        byte[] data = token.getBytes();
-        buf.writeInt(data.length);
-        buf.writeBytes(data);
+    public int getId() {
+        return 0x01;
     }
 
     @Override
-    public void read(ByteBuf buf) {
-        int length = buf.readInt();
-        byte[] data = new byte[length];
-        buf.readBytes(data);
-        token = new String(data);
+    public void write(PacketByteBuffer buf) {
+        buf.writeString(token);
+    }
+
+    @Override
+    public void read(PacketByteBuffer buf) {
+        this.token = buf.readString();
     }
 
     @Override
     public void handle(Connection connection) {
         boolean valid = AuthManager.validate(token);
+
         if (!valid) {
             connection.getChannel().close();
             return;
         }
+
         System.out.println("Client authed: " + token);
     }
 

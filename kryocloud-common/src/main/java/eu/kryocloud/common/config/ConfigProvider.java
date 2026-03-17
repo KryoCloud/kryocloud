@@ -6,11 +6,12 @@ import eu.kryocloud.api.config.type.IConfigTypeProvider;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 
 public class ConfigProvider implements IConfigProvider {
 
-    private static final Object2ObjectOpenHashMap<Class<?>, IConfig> configurations = new Object2ObjectOpenHashMap<>();;
-    private static final Object2ObjectOpenHashMap<Class<?>, IConfigTypeProvider> typeProviderOverrides = new Object2ObjectOpenHashMap<>();;
+    private static final HashMap<Class<?>, IConfig> configurations = new HashMap<>();;
+    private static final HashMap<Class<?>, IConfigTypeProvider> typeProviderOverrides = new HashMap<>();;
 
     @Override
     public <T> T registerConfig(Path path, Class<T> clazz) throws Exception {

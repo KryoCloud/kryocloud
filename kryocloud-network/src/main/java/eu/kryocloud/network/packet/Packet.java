@@ -1,14 +1,17 @@
 package eu.kryocloud.network.packet;
 
 import eu.kryocloud.network.connection.Connection;
-import io.netty.buffer.ByteBuf;
 
 public abstract class Packet {
 
-    public abstract void write(ByteBuf buf);
-    public abstract void read(ByteBuf buf);
+    public abstract int getId();
+
+    public abstract void write(PacketByteBuffer buf);
+
+    public abstract void read(PacketByteBuffer buf);
 
     public void handle(Connection connection) {
-
+        // optional Override
     }
+
 }

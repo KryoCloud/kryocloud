@@ -3,6 +3,8 @@ package eu.kryocloud.network;
 import eu.kryocloud.network.packet.PacketDecoder;
 import eu.kryocloud.network.packet.PacketEncoder;
 import eu.kryocloud.network.packet.PacketHandler;
+import eu.kryocloud.network.packet.PacketRegistry;
+import eu.kryocloud.network.packet.type.AuthPacket;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioIoHandler;
@@ -22,6 +24,7 @@ public class NetServer implements AutoCloseable {
         ServerBootstrap bootstrap = new ServerBootstrap();
 
         bootstrap.group(boss, worker)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new ChannelInitializer<>() {
 
@@ -37,6 +40,10 @@ public class NetServer implements AutoCloseable {
         ChannelFuture future = bootstrap.bind(port).sync();
         System.out.println("NetServer is running on ::" + port);
         future.channel().closeFuture().sync();
+    }
+
+    private void registerPackets() {
+        PacketRegistry.register(0x01, AuthPacket::new);
     }
 
     @Override
