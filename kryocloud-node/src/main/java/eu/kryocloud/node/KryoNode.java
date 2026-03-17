@@ -8,9 +8,9 @@ import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.api.template.ITemplateManager;
 import eu.kryocloud.common.config.ConfigProvider;
 import eu.kryocloud.network.NetServer;
-import eu.kryocloud.network.packet.PacketManager;
-import eu.kryocloud.network.packet.impl.AuthPacket;
 import eu.kryocloud.node.config.LaunchConfig;
+import eu.kryocloud.network.packet.PacketRegistry;
+import eu.kryocloud.network.packet.type.AuthPacket;
 import eu.kryocloud.node.database.DatabaseProvider;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.ServiceManager;
@@ -38,11 +38,11 @@ public class KryoNode implements INode {
             LaunchConfig launchConfig = this.configProvider.registerConfig(Path.of("launch.cfg"), LaunchConfig.class);
 
             this.databaseProvider = new DatabaseProvider();
-            this.templateManager = new TemplateManager();
+            this.templateManager = new TemplateManager(this.configProvider);
             this.groupManager = new GroupManager();
             this.serviceManager = new ServiceManager();
 
-            PacketManager.register(0x01, AuthPacket.class);
+            PacketRegistry.register(0x01, AuthPacket::new);
             this.netServer = new NetServer(launchConfig.getPort());
         } catch (Exception e) {
             throw new RuntimeException(e);

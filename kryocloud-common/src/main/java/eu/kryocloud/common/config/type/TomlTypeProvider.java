@@ -1,6 +1,5 @@
 package eu.kryocloud.common.config.type;
 
-import eu.kryocloud.api.config.IConfig;
 import org.tomlj.*;
 
 import java.nio.file.Files;
@@ -24,12 +23,15 @@ public class TomlTypeProvider extends TypeProvider {
     }
 
     @Override
-    public void save(Path file, IConfig config) throws Exception {
-        if (config != null) {
-            reflectFields(config);
-        }
-        Map<String, String[]> comments = getFieldComments(file, config);
+    public <T> void save(Path file, T config) throws Exception {
+        Map<String, String[]> comments = java.util.Map.of();
         Map<String, Object> tree = castMap(buildTree());
+
+        if (config != null) {
+            var encoded = encodeConfig(file, config);
+            comments = encoded.comments();
+            tree = encoded.treeData();
+        }
         StringBuilder builder = new StringBuilder();
 
         writeSection(builder, "", tree, comments, true);

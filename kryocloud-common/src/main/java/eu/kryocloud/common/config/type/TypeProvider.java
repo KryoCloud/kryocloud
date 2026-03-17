@@ -1,12 +1,8 @@
 package eu.kryocloud.common.config.type;
 
-import eu.kryocloud.api.config.IConfig;
 import eu.kryocloud.api.config.type.IConfigTypeProvider;
-import eu.kryocloud.common.config.Comment;
+import eu.kryocloud.common.config.codec.ConfigEncoder;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -203,61 +199,11 @@ public abstract class TypeProvider implements IConfigTypeProvider {
         return root;
     }
 
-    protected void reflectFields(IConfig config) {
-        Class<?> clazz = config.getClass();
-        LinkedHashMap<String, Object> orderedFieldValues = new LinkedHashMap<>();
-        LinkedHashMap<String, Object> remainingValues = new LinkedHashMap<>(data);
-
-        for (Field field : getConfigFields(clazz)) {
-            try {
-                field.setAccessible(true);
-                Object value = field.get(config);
-                if (value != null) {
-                    orderedFieldValues.put(field.getName(), value);
-                    remainingValues.remove(field.getName());
-                }
-            } catch (IllegalAccessException _) {
-            }
-        }
-
+    protected <T> ConfigEncoder.Result encodeConfig(java.nio.file.Path file, T config) {
+        ConfigEncoder.Result result = ConfigEncoder.encode(file, config, data);
         data.clear();
-        data.putAll(orderedFieldValues);
-        data.putAll(remainingValues);
-    }
-
-    protected LinkedHashMap<String, String[]> getFieldComments(Path file, IConfig config) {
-        LinkedHashMap<String, String[]> comments = new LinkedHashMap<>();
-
-        if (config == null || !ConfigType.fromFileName(file.getFileName().toString()).supportsComments()) {
-            return comments;
-        }
-
-        for (Field field : getConfigFields(config.getClass())) {
-            Comment comment = field.getAnnotation(Comment.class);
-
-            if (comment == null || comment.value().length == 0) {
-                continue;
-            }
-            comments.put(field.getName(), comment.value());
-        }
-        return comments;
-    }
-
-    protected Field[] getConfigFields(Class<?> clazz) {
-        Field[] declaredFields = clazz.getDeclaredFields();
-        LinkedHashSet<Field> fields = new LinkedHashSet<>();
-
-        for (Field field : declaredFields) {
-            if (isConfigField(field)) {
-                fields.add(field);
-            }
-        }
-        return fields.toArray(Field[]::new);
-    }
-
-    private boolean isConfigField(Field field) {
-        int modifiers = field.getModifiers();
-        return !field.isSynthetic() && !Modifier.isStatic(modifiers);
+        data.putAll(result.flatData());
+        return result;
     }
 
     @SuppressWarnings("unchecked")

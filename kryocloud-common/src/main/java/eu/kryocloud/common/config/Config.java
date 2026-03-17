@@ -2,9 +2,9 @@ package eu.kryocloud.common.config;
 
 import eu.kryocloud.api.config.IConfig;
 import eu.kryocloud.api.config.type.IConfigTypeProvider;
+import eu.kryocloud.common.config.codec.ConfigDecoder;
 import eu.kryocloud.common.config.type.ConfigType;
 
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
@@ -36,57 +36,10 @@ public abstract class Config implements IConfig {
                 });
             }
 
-            populateFields();
+            ConfigDecoder.decode(this, provider);
         } catch (Exception e) {
             throw new RuntimeException("Failed to load config: " + file, e);
         }
-    }
-
-    private void populateFields() {
-        Class<?> clazz = this.getClass();
-        for (Field field : clazz.getDeclaredFields()) {
-            if (field.getName().equals("file") || field.getName().equals("provider") || field.getName().equals("defaults")) {
-                continue;
-            }
-
-            try {
-                field.setAccessible(true);
-                Class<?> fieldType = getWrapperType(field.getType());
-                Object value = provider.get(field.getName(), fieldType);
-                if (value != null) {
-                    field.set(this, value);
-                }
-            } catch (IllegalAccessException _) {
-            }
-        }
-    }
-
-    private Class<?> getWrapperType(Class<?> type) {
-        if (type == int.class) {
-            return Integer.class;
-        }
-        if (type == long.class) {
-            return Long.class;
-        }
-        if (type == double.class) {
-            return Double.class;
-        }
-        if (type == float.class) {
-            return Float.class;
-        }
-        if (type == boolean.class) {
-            return Boolean.class;
-        }
-        if (type == byte.class) {
-            return Byte.class;
-        }
-        if (type == short.class) {
-            return Short.class;
-        }
-        if (type == char.class) {
-            return Character.class;
-        }
-        return type;
     }
 
     @Override
@@ -128,9 +81,9 @@ public abstract class Config implements IConfig {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClass().getSimpleName()).append("{");
 
-        Field[] fields = this.getClass().getDeclaredFields();
+        java.lang.reflect.Field[] fields = this.getClass().getDeclaredFields();
         for (int i = 0; i < fields.length; i++) {
-            Field field = fields[i];
+            java.lang.reflect.Field field = fields[i];
             field.setAccessible(true);
             try {
                 sb.append(field.getName()).append("=").append(field.get(this));

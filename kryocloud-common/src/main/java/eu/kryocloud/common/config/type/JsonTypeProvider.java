@@ -1,6 +1,5 @@
 package eu.kryocloud.common.config.type;
 
-import eu.kryocloud.api.config.IConfig;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
@@ -22,11 +21,12 @@ public class JsonTypeProvider extends TypeProvider {
     }
 
     @Override
-    public void save(Path file, IConfig config) throws Exception {
-        if (config != null) {
-            reflectFields(config);
-        }
+    public <T> void save(Path file, T config) throws Exception {
         Map<String, Object> tree = castMap(buildTree());
+
+        if (config != null) {
+            tree = encodeConfig(file, config).treeData();
+        }
 
         if (file.getParent() != null) {
             Files.createDirectories(file.getParent());

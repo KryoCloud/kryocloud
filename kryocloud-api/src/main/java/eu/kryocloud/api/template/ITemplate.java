@@ -5,8 +5,6 @@ import java.util.UUID;
 
 public interface ITemplate {
 
-    UUID uniqueId();
-
     String name();
 
     Path path();
