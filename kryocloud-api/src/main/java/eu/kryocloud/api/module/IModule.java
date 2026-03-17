@@ -1,7 +1,7 @@
 package eu.kryocloud.api.module;
 
 import eu.kryocloud.api.node.INode;
-import eu.kryocloud.api.worker.IWorker;
+import eu.kryocloud.api.wrapper.IWrapper;
 
 import java.util.Collection;
 
@@ -12,6 +12,6 @@ public interface IModule {
     void disabled();
 
     INode node();
-    Collection<IWorker> workers();
+    Collection<IWrapper> workers();
 
 }

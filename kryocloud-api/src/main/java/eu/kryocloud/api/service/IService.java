@@ -3,7 +3,7 @@ package eu.kryocloud.api.service;
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.api.player.IPlayer;
 import eu.kryocloud.api.template.ITemplate;
-import eu.kryocloud.api.worker.IWorker;
+import eu.kryocloud.api.wrapper.IWrapper;
 
 import java.util.Collection;
 import java.util.UUID;
@@ -22,7 +22,7 @@ public interface IService {
 
     IGroup group();
     ITemplate template();
-    IWorker worker();
+    IWrapper worker();
 
     Collection<IPlayer> onlinePlayers();
 
