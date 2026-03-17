@@ -1,6 +1,6 @@
 package eu.kryocloud.common.config.type;
 
-import it.unimi.dsi.fastutil.objects.*;
+import eu.kryocloud.api.config.IConfig;
 import org.tomlj.*;
 
 import java.nio.file.Files;
@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-public class TomlTypeProvider extends AbstractTypeProvider {
+public class TomlTypeProvider extends TypeProvider {
 
     @Override
     public void load(Path file) throws Exception {
@@ -24,14 +24,22 @@ public class TomlTypeProvider extends AbstractTypeProvider {
     }
 
     @Override
-    public void save(Path file) throws Exception {
-        Map<String, Object> tree = (Map<String, Object>) buildTree();
+    public void save(Path file, IConfig config) throws Exception {
+        if (config != null) {
+            reflectFields(config);
+        }
+        Map<String, String[]> comments = getFieldComments(file, config);
+        Map<String, Object> tree = castMap(buildTree());
         StringBuilder builder = new StringBuilder();
-        writeSection(builder, "", tree);
+
+        writeSection(builder, "", tree, comments, true);
+        if (file.getParent() != null) {
+            Files.createDirectories(file.getParent());
+        }
         Files.writeString(file, builder.toString());
     }
 
-    private void writeSection(StringBuilder builder, String prefix, Map<String, Object> map) {
+    private void writeSection(StringBuilder builder, String prefix, Map<String, Object> map, Map<String, String[]> comments, boolean rootSection) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
@@ -40,15 +48,31 @@ public class TomlTypeProvider extends AbstractTypeProvider {
                 String section = prefix.isEmpty()
                         ? key
                         : prefix + "." + key;
-                builder.append("\n[").append(section).append("]\n");
-                writeSection(builder, section, (Map<String, Object>) child);
+
+                if (!rootSection || !builder.isEmpty()) {
+                    builder.append("\n");
+                }
+                builder.append("[").append(section).append("]\n");
+                writeSection(builder, section, castMap(child), comments, false);
                 continue;
+            }
+
+            String[] fieldComments = comments.get(prefix.isEmpty() ? key : prefix + "." + key);
+            if (fieldComments != null) {
+                for (String comment : fieldComments) {
+                    builder.append("# ").append(comment).append("\n");
+                }
             }
             builder.append(key)
                     .append(" = ")
                     .append(format(value))
                     .append("\n");
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castMap(Object value) {
+        return (Map<String, Object>) value;
     }
 
     private String format(Object value) {

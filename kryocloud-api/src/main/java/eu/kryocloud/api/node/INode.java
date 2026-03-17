@@ -5,7 +5,6 @@ import eu.kryocloud.api.database.IDatabaseProvider;
 import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.api.template.ITemplateManager;
-import eu.kryocloud.api.util.WriteOnceReference;
 
 public interface INode {
     IConfigProvider configProvider();

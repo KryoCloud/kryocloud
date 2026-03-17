@@ -4,16 +4,19 @@ import eu.kryocloud.api.config.type.IConfigTypeProvider;
 
 public enum ConfigType {
 
-    YAML(new YamlTypeProvider(), ".yaml"),
-    TOML(new TomlTypeProvider(), ".toml"),
-    JSON(new JsonTypeProvider(), ".json");
+    PROPERTIES(new PropertiesTypeProvider(), ".cfg", true),
+    YAML(new YamlTypeProvider(), ".yaml", true),
+    TOML(new TomlTypeProvider(), ".toml", true),
+    JSON(new JsonTypeProvider(), ".json", false);
 
     private final IConfigTypeProvider typeProvider;
     private final String ending;
+    private final boolean comments;
 
-    ConfigType(IConfigTypeProvider typeProvider, String ending) {
+    ConfigType(IConfigTypeProvider typeProvider, String ending, boolean comments) {
         this.typeProvider = typeProvider;
         this.ending = ending;
+        this.comments = comments;
     }
 
     public IConfigTypeProvider getTypeProvider() {
@@ -22,6 +25,10 @@ public enum ConfigType {
 
     public String getEnding() {
         return ending;
+    }
+
+    public boolean supportsComments() {
+        return comments;
     }
 
     public static ConfigType fromFileName(String fileName) {

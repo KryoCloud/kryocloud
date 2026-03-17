@@ -2,28 +2,43 @@ package eu.kryocloud.common.config;
 
 import eu.kryocloud.api.config.IConfig;
 import eu.kryocloud.api.config.IConfigProvider;
+import eu.kryocloud.api.config.type.IConfigTypeProvider;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 import java.nio.file.Path;
 
 public class ConfigProvider implements IConfigProvider {
 
-    private final Object2ObjectOpenHashMap<Path, IConfig> configurations;
-
-    public ConfigProvider() {
-        this.configurations = new Object2ObjectOpenHashMap<>();
-    }
+    private static final Object2ObjectOpenHashMap<Class<?>, IConfig> configurations = new Object2ObjectOpenHashMap<>();;
+    private static final Object2ObjectOpenHashMap<Class<?>, IConfigTypeProvider> typeProviderOverrides = new Object2ObjectOpenHashMap<>();;
 
     @Override
-    public <T> T registerConfig(Path path, Class<T> clazz) {
+    public <T> T registerConfig(Path path, Class<T> clazz) throws Exception {
         if (!Config.class.isAssignableFrom(clazz)) {
             return null;
         }
-        return null;
+        T config = clazz.getConstructor(Path.class).newInstance(path);
+        configurations.put(clazz, (IConfig) config);
+        ((IConfig) config).load();
+        ((IConfig) config).save();
+        return config;
     }
 
     @Override
-    public void unregisterConfig(Path path) {
+    public void unregisterConfig(Class<?> clazz) {
+        if (configurations.containsKey(clazz)) {
+            configurations.remove(clazz);
+        }
+        if (typeProviderOverrides.containsKey(clazz)) {
+            configurations.remove(clazz);
+        }
+    }
 
+    @Override
+    public <T> T getConfig(Class<T> clazz) {
+        if (!Config.class.isAssignableFrom(clazz)) {
+            return null;
+        }
+        return (T) configurations.get(clazz);
     }
 }

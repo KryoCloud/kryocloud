@@ -1,16 +1,29 @@
 package eu.kryocloud.node.config;
 
+import eu.kryocloud.common.config.Comment;
 import eu.kryocloud.common.config.Config;
 
 import java.nio.file.Path;
 
 public class LaunchConfig extends Config {
 
-    private String host;
-    private int port;
+    @Comment("Host to bind the node to")
+    private String host = "127.0.0.1";
 
-    public LaunchConfig() {
-        super(Path.of("launch."));
+    @Comment("Port to bind the node to")
+    private int port = 1130;
+
+    @Comment("File extension for files created by the node")
+    private String fileExtension = ".yaml";
+
+    @Comment("Update channel for the node")
+    private String updateChannel = "stable";
+
+    @Comment("Whether to automatically update the node")
+    private boolean autoUpdate = true;
+
+    public LaunchConfig(Path path) {
+        super(path);
     }
 
     public String getHost() {
@@ -27,5 +40,29 @@ public class LaunchConfig extends Config {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public String getFileExtension() {
+        return fileExtension;
+    }
+
+    public void setFileExtension(String fileExtension) {
+        this.fileExtension = fileExtension;
+    }
+
+    public String getUpdateChannel() {
+        return updateChannel;
+    }
+
+    public void setUpdateChannel(String updateChannel) {
+        this.updateChannel = updateChannel;
+    }
+
+    public boolean isAutoUpdate() {
+        return autoUpdate;
+    }
+
+    public void setAutoUpdate(boolean autoUpdate) {
+        this.autoUpdate = autoUpdate;
     }
 }
