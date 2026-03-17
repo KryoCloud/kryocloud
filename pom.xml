@@ -15,9 +15,8 @@
         <module>kryocloud-node</module>
         <module>kryocloud-network</module>
         <module>kryocloud-launcher</module>
-        <module>kryocloud-wrapper</module>
-        <module>kryocloud-module-api</module>
         <module>kryocloud-plugin-api</module>
+        <module>kryocloud-wrapper</module>
     </modules>
 
     <properties>
