@@ -1,7 +1,7 @@
-package eu.kryocloud.api.manifest;
+package eu.kryocloud.common.manifest;
 
-import eu.kryocloud.api.manifest.dependency.Dependency;
-import eu.kryocloud.api.manifest.software.Software;
+import eu.kryocloud.common.manifest.dependency.Dependency;
+import eu.kryocloud.common.manifest.software.Software;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 

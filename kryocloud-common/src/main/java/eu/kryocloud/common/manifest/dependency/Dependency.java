@@ -1,4 +1,4 @@
-package eu.kryocloud.api.manifest.dependency;
+package eu.kryocloud.common.manifest.dependency;
 
 public record Dependency(String groupId, String artifactId, String version, Repository repository) {
 }

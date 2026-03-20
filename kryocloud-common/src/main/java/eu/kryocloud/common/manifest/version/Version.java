@@ -1,4 +1,4 @@
-package eu.kryocloud.api.manifest.version;
+package eu.kryocloud.common.manifest.version;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 

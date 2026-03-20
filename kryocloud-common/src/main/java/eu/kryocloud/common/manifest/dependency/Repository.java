@@ -1,4 +1,4 @@
-package eu.kryocloud.api.manifest.dependency;
+package eu.kryocloud.common.manifest.dependency;
 
 public record Repository(String id, String url) {
 }

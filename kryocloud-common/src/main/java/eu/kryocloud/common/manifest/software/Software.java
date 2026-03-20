@@ -1,4 +1,4 @@
-package eu.kryocloud.api.manifest.software;
+package eu.kryocloud.common.manifest.software;
 
 public abstract class Software {
 

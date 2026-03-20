@@ -1,6 +1,6 @@
-package eu.kryocloud.api.manifest.software;
+package eu.kryocloud.common.manifest.software;
 
-import eu.kryocloud.api.manifest.version.Version;
+import eu.kryocloud.common.manifest.version.Version;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 public class ServerSoftware extends Software {
