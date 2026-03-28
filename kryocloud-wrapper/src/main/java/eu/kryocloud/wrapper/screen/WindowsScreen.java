@@ -3,20 +3,24 @@ package eu.kryocloud.wrapper.screen;
 import eu.kryocloud.api.screen.IScreen;
 
 import java.io.*;
+import java.nio.file.Path;
 
 public class WindowsScreen implements IScreen {
 
     private final String session;
+    private final Path workingDirectory;
     private Process process;
     private BufferedWriter writer;
     private final StringBuilder buffer = new StringBuilder();
 
-    public WindowsScreen(String session) {
+    public WindowsScreen(String session, Path workingDirectory) {
         this.session = session;
+        this.workingDirectory = workingDirectory;
     }
 
     public void start(String command) throws IOException {
         ProcessBuilder pb = new ProcessBuilder("cmd.exe");
+        pb.directory(workingDirectory.toFile());
         pb.redirectErrorStream(true);
 
         process = pb.start();

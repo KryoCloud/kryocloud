@@ -1,5 +1,7 @@
 package eu.kryocloud.api.server;
 
+import java.nio.file.Path;
+
 public interface ICloudServer {
 
     void start() throws Exception;
@@ -9,5 +11,6 @@ public interface ICloudServer {
 
     boolean isOnline() throws Exception;
     String logs() throws Exception;
+    Path workingDirectory();
 
 }

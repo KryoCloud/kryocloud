@@ -3,13 +3,16 @@ package eu.kryocloud.wrapper.screen;
 import eu.kryocloud.api.screen.IScreen;
 
 import java.io.*;
+import java.nio.file.Path;
 
 public class UnixScreen implements IScreen {
 
     private final String session;
+    private final Path workingDirectory;
 
-    public UnixScreen(String session) {
+    public UnixScreen(String session, Path workingDirectory) {
         this.session = session;
+        this.workingDirectory = workingDirectory;
     }
 
     public void start(String command) throws IOException {
@@ -44,7 +47,10 @@ public class UnixScreen implements IScreen {
     }
 
     public boolean exists() throws IOException {
-        Process p = new ProcessBuilder("screen", "-ls").start();
+        ProcessBuilder pb = new ProcessBuilder("screen", "-ls");
+        pb.directory(workingDirectory.toFile());
+
+        Process p = pb.start();
 
         BufferedReader reader = new BufferedReader(
                 new InputStreamReader(p.getInputStream())

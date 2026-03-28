@@ -3,6 +3,7 @@ package eu.kryocloud.wrapper.screen;
 import eu.kryocloud.api.screen.IScreen;
 import eu.kryocloud.api.screen.IScreenManager;
 
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ScreenManager implements IScreenManager {
@@ -15,10 +16,10 @@ public class ScreenManager implements IScreenManager {
         isWindows = os.contains("win");
     }
 
-    public IScreen create(String session) {
+    public IScreen create(String session, Path workingDirectory) {
         IScreen screen = isWindows
-                ? new WindowsScreen(session)
-                : new UnixScreen(session);
+                ? new WindowsScreen(session, workingDirectory)
+                : new UnixScreen(session, workingDirectory);
 
         sessions.put(session, screen);
         return screen;
