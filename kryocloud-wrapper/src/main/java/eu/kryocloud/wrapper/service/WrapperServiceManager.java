@@ -1,5 +1,8 @@
 package eu.kryocloud.wrapper.service;
 
+import eu.kryocloud.api.server.ICloudServer;
+import eu.kryocloud.api.server.IServerManager;
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStatePacket;
@@ -18,14 +21,22 @@ import java.util.concurrent.ConcurrentMap;
 
 public final class WrapperServiceManager {
 
+    private static final KryoLogger LOGGER = KryoLogger.logger("WrapperServiceManager");
+
     private final String wrapperId;
+    private final String advertisedAddress;
     private final Path templatesDirectory;
     private final Path servicesDirectory;
+    private final IServerManager serverManager;
     private final ConcurrentMap<String, WrapperServiceInstance> services = new ConcurrentHashMap<>();
 
-    public WrapperServiceManager(String wrapperId, Path templatesDirectory, Path servicesDirectory) {
+    public WrapperServiceManager(String wrapperId, String advertisedAddress, Path templatesDirectory, Path servicesDirectory, IServerManager serverManager) {
         if (wrapperId == null || wrapperId.isBlank()) {
             throw new IllegalArgumentException("wrapperId must not be blank");
+        }
+
+        if (advertisedAddress == null || advertisedAddress.isBlank()) {
+            throw new IllegalArgumentException("advertisedAddress must not be blank");
         }
 
         if (templatesDirectory == null) {
@@ -36,12 +47,18 @@ public final class WrapperServiceManager {
             throw new IllegalArgumentException("servicesDirectory must not be null");
         }
 
+        if (serverManager == null) {
+            throw new IllegalArgumentException("serverManager must not be null");
+        }
+
         this.wrapperId = wrapperId;
+        this.advertisedAddress = advertisedAddress;
         this.templatesDirectory = templatesDirectory;
         this.servicesDirectory = servicesDirectory;
+        this.serverManager = serverManager;
     }
 
-    public WrapperServiceInstance start(KryoConnection nodeConnection, ServiceStartRequestPacket packet) {
+    public Optional<WrapperServiceInstance> start(KryoConnection nodeConnection, ServiceStartRequestPacket packet) {
         if (nodeConnection == null) {
             throw new IllegalArgumentException("nodeConnection must not be null");
         }
@@ -51,7 +68,8 @@ public final class WrapperServiceManager {
         }
 
         if (services.containsKey(packet.serviceId())) {
-            throw new IllegalStateException("Service is already running or reserved: " + packet.serviceId());
+            sendState(nodeConnection, packet, CloudServiceState.FAILED, "Service is already running or reserved");
+            return Optional.empty();
         }
 
         sendState(nodeConnection, packet, CloudServiceState.PREPARING, "Preparing service workspace");
@@ -61,24 +79,32 @@ public final class WrapperServiceManager {
 
         try {
             prepareWorkspace(templateDirectory, workingDirectory);
-            sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft process");
+            sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting screen session");
 
-            Process process = startProcess(packet, workingDirectory);
-            WrapperServiceInstance instance = new WrapperServiceInstance(packet.requestId(), packet.serviceId(), packet.groupName(), packet.templateName(), packet.serviceType(), packet.port(), packet.maxMemoryMb(), packet.staticService(), workingDirectory, process, CloudServiceState.STARTING, Instant.now());
-
+            ICloudServer server = serverManager.create(packet.serviceId(), workingDirectory, packet.maxMemoryMb(), packet.maxMemoryMb(), jvmArgs(packet));
+            WrapperServiceInstance instance = new WrapperServiceInstance(packet.requestId(), packet.serviceId(), packet.groupName(), packet.templateName(), packet.serviceType(), packet.port(), packet.maxMemoryMb(), packet.staticService(), workingDirectory, server, CloudServiceState.STARTING, Instant.now());
             WrapperServiceInstance existing = services.putIfAbsent(packet.serviceId(), instance);
 
             if (existing != null) {
-                process.destroy();
-                throw new IllegalStateException("Service became reserved while starting: " + packet.serviceId());
+                serverManager.remove(packet.serviceId());
+                sendState(nodeConnection, packet, CloudServiceState.FAILED, "Service became reserved while starting");
+                return Optional.empty();
             }
 
-            sendState(nodeConnection, packet, CloudServiceState.RUNNING, "Service process started");
-            return instance.withState(CloudServiceState.RUNNING);
+            server.start();
+
+            WrapperServiceInstance runningInstance = instance.withState(CloudServiceState.RUNNING);
+            services.put(packet.serviceId(), runningInstance);
+            sendState(nodeConnection, packet, CloudServiceState.RUNNING, "Screen session started");
+            LOGGER.success("Started service " + packet.serviceId() + " on port " + packet.port());
+
+            return Optional.of(runningInstance);
         } catch (Exception exception) {
             services.remove(packet.serviceId());
-            sendState(nodeConnection, packet, CloudServiceState.FAILED, exception.getMessage() == null ? "Service start failed" : exception.getMessage());
-            throw new RuntimeException("Failed to start service " + packet.serviceId(), exception);
+            safeRemoveServer(packet.serviceId());
+            sendState(nodeConnection, packet, CloudServiceState.FAILED, message(exception, "Service start failed"));
+            LOGGER.warn("Service " + packet.serviceId() + " failed to start: " + message(exception, "Service start failed"));
+            return Optional.empty();
         }
     }
 
@@ -98,27 +124,15 @@ public final class WrapperServiceManager {
         }
 
         sendState(nodeConnection, instance, CloudServiceState.STOPPING, packet.reason());
-
-        Process process = instance.process();
-
-        if (process != null && process.isAlive()) {
-            if (packet.force()) {
-                process.destroyForcibly();
-            }
-            if(!packet.force()) {
-                process.destroy();
-            }
-        }
-
+        stopInstance(packet.serviceId(), instance);
         sendState(nodeConnection, instance, CloudServiceState.STOPPED, "Service stopped");
+        LOGGER.success("Stopped service " + packet.serviceId());
+
         return Optional.of(instance.withState(CloudServiceState.STOPPED));
     }
 
     public Optional<WrapperServiceInstance> service(String serviceId) {
-        if (serviceId == null || serviceId.isBlank()) {
-            throw new IllegalArgumentException("serviceId must not be blank");
-        }
-
+        validateServiceId(serviceId);
         return Optional.ofNullable(services.get(serviceId));
     }
 
@@ -132,14 +146,24 @@ public final class WrapperServiceManager {
 
     public void shutdown() {
         for (WrapperServiceInstance instance : services.values()) {
-            Process process = instance.process();
-
-            if (process != null && process.isAlive()) {
-                process.destroy();
-            }
+            stopInstance(instance.serviceId(), instance);
         }
 
         services.clear();
+    }
+
+    private List<String> jvmArgs(ServiceStartRequestPacket packet) {
+        return List.of("-Dkryocloud.service.id=" + packet.serviceId(), "-Dkryocloud.group=" + packet.groupName(), "-Dkryocloud.template=" + packet.templateName(), "-Dkryocloud.static=" + packet.staticService(), "-Dserver.port=" + packet.port());
+    }
+
+    private void stopInstance(String serviceId, WrapperServiceInstance instance) {
+        try {
+            instance.server().stop();
+            safeRemoveServer(serviceId);
+        } catch (Exception exception) {
+            safeRemoveServer(serviceId);
+            LOGGER.warn("Failed to stop service " + serviceId + ": " + exception.getMessage());
+        }
     }
 
     private void prepareWorkspace(Path templateDirectory, Path workingDirectory) throws IOException {
@@ -156,26 +180,52 @@ public final class WrapperServiceManager {
         copyRecursively(templateDirectory, workingDirectory);
     }
 
-    private Process startProcess(ServiceStartRequestPacket packet, Path workingDirectory) throws IOException {
-        Path jarFile = workingDirectory.resolve("server.jar");
-
-        if (!Files.exists(jarFile)) {
-            throw new IllegalStateException("Missing server.jar in service workspace: " + jarFile);
-        }
-
-        ProcessBuilder processBuilder = new ProcessBuilder("java", "-Xmx" + packet.maxMemoryMb() + "M", "-Dkryocloud.service.id=" + packet.serviceId(), "-Dkryocloud.group=" + packet.groupName(), "-Dserver.port=" + packet.port(), "-jar", "server.jar", "nogui");
-        processBuilder.directory(workingDirectory.toFile());
-        processBuilder.redirectErrorStream(true);
-
-        return processBuilder.start();
-    }
-
     private void sendState(KryoConnection connection, ServiceStartRequestPacket packet, CloudServiceState state, String message) {
-        connection.send(new ServiceStatePacket(packet.serviceId(), packet.groupName(), packet.serviceType(), state, wrapperId, "127.0.0.1", packet.port(), message == null ? "" : message));
+        connection.send(new ServiceStatePacket(packet.serviceId(), packet.groupName(), packet.serviceType(), state, wrapperId, advertisedAddress, packet.port(), normalizeMessage(message)));
     }
 
     private void sendState(KryoConnection connection, WrapperServiceInstance instance, CloudServiceState state, String message) {
-        connection.send(new ServiceStatePacket(instance.serviceId(), instance.groupName(), instance.serviceType(), state, wrapperId, "127.0.0.1", instance.port(), message == null ? "" : message));
+        connection.send(new ServiceStatePacket(instance.serviceId(), instance.groupName(), instance.serviceType(), state, wrapperId, advertisedAddress, instance.port(), normalizeMessage(message)));
+    }
+
+    private String normalizeMessage(String message) {
+        if (message == null) {
+            return "";
+        }
+
+        return message;
+    }
+
+    private String message(Exception exception, String fallback) {
+        if (exception == null) {
+            return fallback;
+        }
+
+        String message = exception.getMessage();
+
+        if (message == null || message.isBlank()) {
+            return fallback;
+        }
+
+        return message;
+    }
+
+    private void validateServiceId(String serviceId) {
+        if (serviceId == null) {
+            throw new IllegalArgumentException("serviceId must not be null");
+        }
+
+        if (serviceId.isBlank()) {
+            throw new IllegalArgumentException("serviceId must not be blank");
+        }
+    }
+
+    private void safeRemoveServer(String serviceId) {
+        try {
+            serverManager.remove(serviceId);
+        } catch (Exception exception) {
+            LOGGER.warn("Failed to remove server " + serviceId + ": " + exception.getMessage());
+        }
     }
 
     private void copyRecursively(Path source, Path target) throws IOException {
@@ -188,6 +238,7 @@ public final class WrapperServiceManager {
                     Files.createDirectories(destination);
                     continue;
                 }
+
                 Files.copy(path, destination);
             }
         }

@@ -1,5 +1,6 @@
 package eu.kryocloud.network.packet.bus;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.Packet;
 
@@ -11,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class KryoPacketBus {
 
+    private static final KryoLogger LOGGER = KryoLogger.logger("PacketBus");
     private static final Map<Class<? extends Packet>, CopyOnWriteArrayList<RegisteredPacketListener<? extends Packet>>> LISTENERS = new ConcurrentHashMap<>();
 
     private KryoPacketBus() {
@@ -26,9 +28,7 @@ public final class KryoPacketBus {
         }
 
         RegisteredPacketListener<T> registeredListener = new RegisteredPacketListener<>(listener);
-
         LISTENERS.computeIfAbsent(packetType, ignored -> new CopyOnWriteArrayList<>()).add(registeredListener);
-
         return new PacketSubscription(packetType, listener);
     }
 
@@ -42,7 +42,6 @@ public final class KryoPacketBus {
         }
 
         PacketContext context = new PacketContext(connection, System.currentTimeMillis());
-
         dispatchTo(Packet.class, context, packet);
 
         if (packet.getClass() != Packet.class) {
@@ -89,13 +88,15 @@ public final class KryoPacketBus {
         }
 
         for (RegisteredPacketListener<? extends Packet> listener : listeners) {
-            listener.invoke(context, packet);
+            try {
+                listener.invoke(context, packet);
+            } catch (Exception exception) {
+                LOGGER.error("Packet listener failed for " + packet.getClass().getSimpleName() + " from " + context.connection().remoteAddress(), exception);
+            }
         }
     }
 
-    private record RegisteredPacketListener<T extends Packet>(
-            PacketListener<T> listener
-    ) {
+    private record RegisteredPacketListener<T extends Packet>(PacketListener<T> listener) {
 
         private RegisteredPacketListener {
             if (listener == null) {

@@ -1,5 +1,6 @@
 package eu.kryocloud.wrapper.service;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
 import eu.kryocloud.network.packet.bus.PacketContext;
 import eu.kryocloud.network.packet.bus.PacketSubscription;
@@ -12,6 +13,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class WrapperServicePacketHandlers implements AutoCloseable {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("WrapperServices");
 
     private final WrapperServiceManager serviceManager;
     private final AtomicBoolean registered = new AtomicBoolean(false);
@@ -50,7 +53,7 @@ public final class WrapperServicePacketHandlers implements AutoCloseable {
         }
 
         serviceManager.stop(context.connection(), packet).orElseGet(() -> {
-            System.out.println("Stop requested for unknown service " + packet.serviceId());
+            LOGGER.warn("Stop requested for unknown service " + packet.serviceId());
             return null;
         });
     }
@@ -60,7 +63,11 @@ public final class WrapperServicePacketHandlers implements AutoCloseable {
             throw new IllegalArgumentException("context must not be null");
         }
 
-        return context.authenticated() && context.connection().peerType() == PeerType.NODE;
+        if (!context.authenticated()) {
+            return false;
+        }
+
+        return context.connection().peerType() == PeerType.NODE;
     }
 
     @Override

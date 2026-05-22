@@ -1,6 +1,9 @@
 package eu.kryocloud.wrapper;
 
 import eu.kryocloud.api.config.IConfigProvider;
+import eu.kryocloud.api.screen.IScreenManager;
+import eu.kryocloud.api.server.IServerManager;
+import eu.kryocloud.api.wrapper.IWrapper;
 import eu.kryocloud.common.config.ConfigProvider;
 import eu.kryocloud.network.KryoProtocolClient;
 import eu.kryocloud.network.connection.KryoConnection;
@@ -8,6 +11,8 @@ import eu.kryocloud.network.packet.type.wrapper.WrapperRegisterPacket;
 import eu.kryocloud.network.protocol.PeerType;
 import eu.kryocloud.wrapper.config.WrapperLaunchConfig;
 import eu.kryocloud.wrapper.heartbeat.WrapperHeartbeatTask;
+import eu.kryocloud.wrapper.screen.ScreenManager;
+import eu.kryocloud.wrapper.server.ServerManager;
 import eu.kryocloud.wrapper.service.WrapperServiceManager;
 import eu.kryocloud.wrapper.service.WrapperServicePacketHandlers;
 
@@ -17,10 +22,12 @@ import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-public final class KryoWrapper {
+public final class KryoWrapper implements IWrapper {
 
     private IConfigProvider configProvider;
     private WrapperLaunchConfig launchConfig;
+    private IScreenManager screenManager;
+    private IServerManager serverManager;
     private KryoProtocolClient protocolClient;
     private WrapperServiceManager serviceManager;
     private WrapperServicePacketHandlers servicePacketHandlers;
@@ -46,7 +53,9 @@ public final class KryoWrapper {
             validatePort(launchConfig.getNodePort(), "nodePort");
             validatePositive(launchConfig.getMaxMemoryMb(), "maxMemoryMb");
 
-            serviceManager = new WrapperServiceManager(wrapperId, templatesDirectory, servicesDirectory);
+            screenManager = new ScreenManager();
+            serverManager = new ServerManager(screenManager);
+            serviceManager = new WrapperServiceManager(wrapperId, advertisedAddress, templatesDirectory, servicesDirectory, serverManager);
             servicePacketHandlers = new WrapperServicePacketHandlers(serviceManager);
             servicePacketHandlers.register();
 
@@ -97,12 +106,27 @@ public final class KryoWrapper {
             protocolClient = null;
         }
 
+        if (serverManager instanceof ServerManager manager) {
+            manager.clear();
+        }
+
+        serverManager = null;
+        screenManager = null;
+
         if (configProvider != null) {
             configProvider.unregisterConfig(WrapperLaunchConfig.class);
             configProvider = null;
         }
 
         launchConfig = null;
+    }
+
+    public IServerManager serverManager() {
+        return serverManager;
+    }
+
+    public IScreenManager screenManager() {
+        return screenManager;
     }
 
     public KryoProtocolClient protocolClient() {

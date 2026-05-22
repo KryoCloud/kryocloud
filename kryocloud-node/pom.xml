@@ -23,6 +23,11 @@
             <artifactId>kryocloud-network</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline-reader</artifactId>
+            <version>3.30.5</version>
+        </dependency>
     </dependencies>
 
 </project>

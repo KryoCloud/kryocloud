@@ -1,5 +1,6 @@
 package eu.kryocloud.wrapper.service;
 
+import eu.kryocloud.api.server.ICloudServer;
 import eu.kryocloud.network.protocol.CloudServiceState;
 import eu.kryocloud.network.protocol.CloudServiceType;
 
@@ -7,7 +8,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
 
-public record WrapperServiceInstance(UUID requestId, String serviceId, String groupName, String templateName, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService, Path workingDirectory, Process process, CloudServiceState state, Instant startedAt) {
+public record WrapperServiceInstance(UUID requestId, String serviceId, String groupName, String templateName, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService, Path workingDirectory, ICloudServer server, CloudServiceState state, Instant startedAt) {
 
     public WrapperServiceInstance {
         if (requestId == null) {
@@ -42,6 +43,10 @@ public record WrapperServiceInstance(UUID requestId, String serviceId, String gr
             throw new IllegalArgumentException("workingDirectory must not be null");
         }
 
+        if (server == null) {
+            throw new IllegalArgumentException("server must not be null");
+        }
+
         if (state == null) {
             throw new IllegalArgumentException("state must not be null");
         }
@@ -52,7 +57,11 @@ public record WrapperServiceInstance(UUID requestId, String serviceId, String gr
     }
 
     public boolean alive() {
-        return process != null && process.isAlive();
+        try {
+            return server.isOnline();
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     public WrapperServiceInstance withState(CloudServiceState newState) {
@@ -60,6 +69,6 @@ public record WrapperServiceInstance(UUID requestId, String serviceId, String gr
             throw new IllegalArgumentException("newState must not be null");
         }
 
-        return new WrapperServiceInstance(requestId, serviceId, groupName, templateName, serviceType, port, maxMemoryMb, staticService, workingDirectory, process, newState, startedAt);
+        return new WrapperServiceInstance(requestId, serviceId, groupName, templateName, serviceType, port, maxMemoryMb, staticService, workingDirectory, server, newState, startedAt);
     }
 }

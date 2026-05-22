@@ -27,4 +27,8 @@ public record PacketContext(KryoConnection connection, long receivedAtMillis) {
 
         return connection.send(packet);
     }
+
+    public void printState(String message) {
+        System.out.println(message);
+    }
 }

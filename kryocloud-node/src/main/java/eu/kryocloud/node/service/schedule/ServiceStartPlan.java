@@ -5,27 +5,15 @@ import eu.kryocloud.network.protocol.CloudServiceType;
 public record ServiceStartPlan(String serviceId, String groupName, String templateName, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService) {
 
     public ServiceStartPlan {
-        if (serviceId == null) {
-            throw new IllegalArgumentException("serviceId must not be null");
-        }
-
-        if (serviceId.isBlank()) {
+        if (serviceId == null || serviceId.isBlank()) {
             throw new IllegalArgumentException("serviceId must not be blank");
         }
 
-        if (groupName == null) {
-            throw new IllegalArgumentException("groupName must not be null");
-        }
-
-        if (groupName.isBlank()) {
+        if (groupName == null || groupName.isBlank()) {
             throw new IllegalArgumentException("groupName must not be blank");
         }
 
-        if (templateName == null) {
-            throw new IllegalArgumentException("templateName must not be null");
-        }
-
-        if (templateName.isBlank()) {
+        if (templateName == null || templateName.isBlank()) {
             throw new IllegalArgumentException("templateName must not be blank");
         }
 

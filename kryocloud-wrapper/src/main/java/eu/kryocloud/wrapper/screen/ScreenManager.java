@@ -4,32 +4,89 @@ import eu.kryocloud.api.screen.IScreen;
 import eu.kryocloud.api.screen.IScreenManager;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-public class ScreenManager implements IScreenManager {
+public final class ScreenManager implements IScreenManager {
 
-    private final ConcurrentHashMap<String, IScreen> sessions = new ConcurrentHashMap<>();
-    private final boolean isWindows;
+    private final ConcurrentMap<String, IScreen> sessions = new ConcurrentHashMap<>();
+    private final boolean windows;
 
     public ScreenManager() {
-        String os = System.getProperty("os.name").toLowerCase();
-        isWindows = os.contains("win");
+        this.windows = System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 
+    @Override
     public IScreen create(String session, Path workingDirectory) {
-        IScreen screen = isWindows
-                ? new WindowsScreen(session, workingDirectory)
-                : new UnixScreen(session, workingDirectory);
+        validateSession(session);
 
-        sessions.put(session, screen);
+        if (workingDirectory == null) {
+            throw new IllegalArgumentException("workingDirectory must not be null");
+        }
+
+        IScreen screen = createScreen(session, workingDirectory);
+        IScreen existing = sessions.putIfAbsent(session, screen);
+
+        if (existing != null) {
+            throw new IllegalStateException("Screen session already exists: " + session);
+        }
+
         return screen;
     }
 
+    @Override
     public IScreen get(String session) {
+        validateSession(session);
         return sessions.get(session);
     }
 
+    @Override
     public void remove(String session) {
-        sessions.remove(session);
+        validateSession(session);
+
+        IScreen screen = sessions.remove(session);
+
+        if (screen == null) {
+            return;
+        }
+
+        try {
+            screen.stop();
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to stop screen session " + session, exception);
+        }
+    }
+
+    public int size() {
+        return sessions.size();
+    }
+
+    public Map<String, IScreen> sessions() {
+        return Map.copyOf(sessions);
+    }
+
+    public void clear() {
+        for (String session : sessions.keySet()) {
+            remove(session);
+        }
+    }
+
+    private IScreen createScreen(String session, Path workingDirectory) {
+        if (windows) {
+            return new WindowsScreen(session, workingDirectory);
+        }
+
+        return new UnixScreen(session, workingDirectory);
+    }
+
+    private void validateSession(String session) {
+        if (session == null) {
+            throw new IllegalArgumentException("session must not be null");
+        }
+
+        if (session.isBlank()) {
+            throw new IllegalArgumentException("session must not be blank");
+        }
     }
 }

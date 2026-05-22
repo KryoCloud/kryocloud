@@ -2,69 +2,123 @@ package eu.kryocloud.wrapper.screen;
 
 import eu.kryocloud.api.screen.IScreen;
 
-import java.io.*;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class UnixScreen implements IScreen {
+public final class UnixScreen implements IScreen {
 
     private final String session;
     private final Path workingDirectory;
 
     public UnixScreen(String session, Path workingDirectory) {
+        validateSession(session);
+
+        if (workingDirectory == null) {
+            throw new IllegalArgumentException("workingDirectory must not be null");
+        }
+
         this.session = session;
         this.workingDirectory = workingDirectory;
     }
 
-    public void start(String command) throws IOException {
-        run("screen", "-dmS", session, "bash", "-c", command);
+    @Override
+    public void start(String command) throws Exception {
+        validateCommand(command);
+        Files.createDirectories(workingDirectory);
+        runAndRequireExit("screen", "-dmS", session, "bash", "-lc", command);
     }
 
-    public void send(String command) throws IOException {
-        run("screen", "-S", session, "-X", "stuff", command + "\n");
+    @Override
+    public void send(String command) throws Exception {
+        validateCommand(command);
+        runAndRequireExit("screen", "-S", session, "-X", "stuff", command + "\n");
     }
 
-    public String capture() throws IOException {
-        File temp = File.createTempFile("screen_" + session, ".log");
+    @Override
+    public String capture() throws Exception {
+        Path hardcopy = Files.createTempFile("kryocloud-screen-" + safePrefix(session) + "-", ".log");
 
-        run("screen", "-S", session, "-X", "hardcopy", temp.getAbsolutePath());
+        try {
+            runAndRequireExit("screen", "-S", session, "-X", "hardcopy", hardcopy.toAbsolutePath().toString());
+            return Files.readString(hardcopy, StandardCharsets.UTF_8);
+        } finally {
+            Files.deleteIfExists(hardcopy);
+        }
+    }
 
-        BufferedReader reader = new BufferedReader(new FileReader(temp));
-        StringBuilder out = new StringBuilder();
-        String line;
-
-        while ((line = reader.readLine()) != null) {
-            out.append(line).append("\n");
+    @Override
+    public void stop() throws Exception {
+        if (!exists()) {
+            return;
         }
 
-        reader.close();
-        temp.delete();
-
-        return out.toString();
+        runAndRequireExit("screen", "-S", session, "-X", "quit");
     }
 
-    public void stop() throws IOException {
-        run("screen", "-S", session, "-X", "quit");
+    @Override
+    public boolean exists() throws Exception {
+        ProcessResult result = run("screen", "-ls");
+        return result.output().contains("." + session);
     }
 
-    public boolean exists() throws IOException {
-        ProcessBuilder pb = new ProcessBuilder("screen", "-ls");
-        pb.directory(workingDirectory.toFile());
+    private ProcessResult run(String... command) throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.directory(workingDirectory.toFile());
+        processBuilder.redirectErrorStream(true);
 
-        Process p = pb.start();
+        Process process = processBuilder.start();
+        byte[] output = process.getInputStream().readAllBytes();
+        int exitCode = process.waitFor();
 
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(p.getInputStream())
-        );
+        return new ProcessResult(exitCode, new String(output, StandardCharsets.UTF_8));
+    }
 
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (line.contains("." + session)) return true;
+    private void runAndRequireExit(String... command) throws Exception {
+        ProcessResult result = run(command);
+
+        if (result.exitCode() == 0) {
+            return;
         }
 
-        return false;
+        throw new IOException("Screen command failed for session " + session + " with exit code " + result.exitCode() + ": " + result.output());
     }
 
-    private void run(String... cmd) throws IOException {
-        new ProcessBuilder(cmd).start();
+    private void validateSession(String session) {
+        if (session == null) {
+            throw new IllegalArgumentException("session must not be null");
+        }
+
+        if (session.isBlank()) {
+            throw new IllegalArgumentException("session must not be blank");
+        }
+
+        if (!session.matches("[A-Za-z0-9_.-]+")) {
+            throw new IllegalArgumentException("session contains unsupported characters: " + session);
+        }
+    }
+
+    private void validateCommand(String command) {
+        if (command == null) {
+            throw new IllegalArgumentException("command must not be null");
+        }
+
+        if (command.isBlank()) {
+            throw new IllegalArgumentException("command must not be blank");
+        }
+    }
+
+    private String safePrefix(String value) {
+        String prefix = value.replaceAll("[^A-Za-z0-9_.-]", "_");
+
+        if (prefix.length() >= 3) {
+            return prefix;
+        }
+
+        return "scr" + prefix;
+    }
+
+    private record ProcessResult(int exitCode, String output) {
     }
 }

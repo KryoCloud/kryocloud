@@ -1,0 +1,133 @@
+package eu.kryocloud.node.console;
+
+import eu.kryocloud.common.logging.ConsoleOutput;
+import eu.kryocloud.common.logging.KryoLogger;
+import eu.kryocloud.node.KryoNode;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
+import org.jline.reader.impl.DefaultParser;
+import org.jline.reader.impl.completer.StringsCompleter;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public final class KryoConsole implements AutoCloseable {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Console");
+
+    private final KryoNode node;
+    private final CommandRegistry commandRegistry;
+    private final AtomicBoolean running = new AtomicBoolean(false);
+
+    private volatile Thread thread;
+    private volatile LineReader reader;
+
+    public KryoConsole(KryoNode node, CommandRegistry commandRegistry) {
+        if (node == null) {
+            throw new IllegalArgumentException("node must not be null");
+        }
+
+        if (commandRegistry == null) {
+            throw new IllegalArgumentException("commandRegistry must not be null");
+        }
+
+        this.node = node;
+        this.commandRegistry = commandRegistry;
+    }
+
+    public void start() {
+        if (!running.compareAndSet(false, true)) {
+            return;
+        }
+
+        Thread consoleThread = new Thread(this::runConsole, "kryocloud-node-console");
+        consoleThread.setDaemon(false);
+        thread = consoleThread;
+        consoleThread.start();
+    }
+
+    @Override
+    public void close() {
+        running.set(false);
+
+        LineReader activeReader = reader;
+
+        if (activeReader != null) {
+            ConsoleOutput.detach(activeReader);
+        }
+
+        Thread consoleThread = thread;
+
+        if (consoleThread == null) {
+            return;
+        }
+
+        if (consoleThread == Thread.currentThread()) {
+            return;
+        }
+
+        consoleThread.interrupt();
+    }
+
+    private void runConsole() {
+        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).build()) {
+            ConsoleContext context = new ConsoleContext(node, terminal, running);
+            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).completer(new StringsCompleter(commandRegistry.commandNames())).build();
+
+            reader = activeReader;
+            ConsoleOutput.attach(activeReader);
+            context.success("KryoCloud Node Console started. Type 'help'.");
+
+            while (running.get()) {
+                readAndExecute(context, activeReader);
+            }
+
+            ConsoleOutput.detach(activeReader);
+        } catch (Exception exception) {
+            LOGGER.error("Console crashed", exception);
+        }
+    }
+
+    private void readAndExecute(ConsoleContext context, LineReader activeReader) {
+        try {
+            String line = activeReader.readLine(prompt());
+            execute(context, line);
+        } catch (UserInterruptException exception) {
+            context.warn("Use 'stop' to shutdown the node.");
+        } catch (EndOfFileException exception) {
+            context.stopConsole();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            context.stopConsole();
+        } catch (Exception exception) {
+            context.error(exception.getMessage());
+        }
+    }
+
+    private void execute(ConsoleContext context, String line) throws Exception {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+
+        List<String> parts = Arrays.stream(line.trim().split("\\s+")).filter(part -> !part.isBlank()).toList();
+
+        if (parts.isEmpty()) {
+            return;
+        }
+
+        String commandName = parts.getFirst();
+        List<String> arguments = parts.subList(1, parts.size());
+        ConsoleCommand command = commandRegistry.command(commandName).orElseThrow(() -> new IllegalArgumentException("Unknown command: " + commandName));
+
+        command.execute(context, arguments);
+    }
+
+    private String prompt() {
+        return "\u001B[38;2;94;234;212mkryocloud\u001B[0m \u001B[38;2;139;148;158m›\u001B[0m ";
+    }
+}

@@ -1,5 +1,6 @@
 package eu.kryocloud.network.handler;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.Packet;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
@@ -12,6 +13,7 @@ import java.util.function.Consumer;
 public final class KryoPacketHandler extends SimpleChannelInboundHandler<Packet> {
 
     public static final AttributeKey<KryoConnection> CONNECTION = AttributeKey.valueOf("kryocloud.connection");
+    private static final KryoLogger LOGGER = KryoLogger.logger("Protocol");
 
     private final Consumer<KryoConnection> connectionOpened;
     private final Consumer<KryoConnection> connectionClosed;
@@ -38,6 +40,7 @@ public final class KryoPacketHandler extends SimpleChannelInboundHandler<Packet>
         KryoConnection connection = new KryoConnection(context.channel());
         context.channel().attr(CONNECTION).set(connection);
         connectionOpened.accept(connection);
+        LOGGER.debug("Connection opened: " + connection.remoteAddress());
     }
 
     @Override
@@ -48,10 +51,13 @@ public final class KryoPacketHandler extends SimpleChannelInboundHandler<Packet>
 
         KryoConnection connection = context.channel().attr(CONNECTION).getAndSet(null);
 
-        if (connection != null) {
-            connection.close();
-            connectionClosed.accept(connection);
+        if (connection == null) {
+            return;
         }
+
+        connection.close();
+        connectionClosed.accept(connection);
+        LOGGER.debug("Connection closed: " + connection.remoteAddress());
     }
 
     @Override
@@ -77,7 +83,7 @@ public final class KryoPacketHandler extends SimpleChannelInboundHandler<Packet>
     @Override
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
         if (cause != null) {
-            cause.printStackTrace();
+            LOGGER.warn("Protocol exception: " + cause.getMessage());
         }
 
         if (context != null) {
