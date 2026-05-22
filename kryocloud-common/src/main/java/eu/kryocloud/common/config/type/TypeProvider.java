@@ -210,4 +210,5 @@ public abstract class TypeProvider implements IConfigTypeProvider {
     private Map<String, Object> castMap(Object value) {
         return (Map<String, Object>) value;
     }
+
 }

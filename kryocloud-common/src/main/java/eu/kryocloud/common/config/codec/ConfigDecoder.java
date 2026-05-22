@@ -4,6 +4,7 @@ import eu.kryocloud.api.config.type.IConfigTypeProvider;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.LinkedHashSet;
 
 public final class ConfigDecoder {
 
@@ -26,7 +27,7 @@ public final class ConfigDecoder {
 
     private static Field[] getConfigFields(Class<?> clazz) {
         Field[] declaredFields = clazz.getDeclaredFields();
-        java.util.LinkedHashSet<Field> fields = new java.util.LinkedHashSet<>();
+        LinkedHashSet<Field> fields = new LinkedHashSet<>();
 
         for (Field field : declaredFields) {
             if (isConfigField(field)) {

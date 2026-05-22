@@ -7,14 +7,17 @@ import eu.kryocloud.api.node.INode;
 import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.api.template.ITemplateManager;
 import eu.kryocloud.common.config.ConfigProvider;
-import eu.kryocloud.network.NetServer;
+import eu.kryocloud.network.KryoProtocolServer;
+import eu.kryocloud.network.auth.AuthManager;
 import eu.kryocloud.node.config.LaunchConfig;
-import eu.kryocloud.network.packet.PacketRegistry;
-import eu.kryocloud.network.packet.type.AuthPacket;
+import eu.kryocloud.node.config.NodeSecurityConfig;
 import eu.kryocloud.node.database.DatabaseProvider;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.ServiceManager;
+import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
 import eu.kryocloud.node.template.TemplateManager;
+import eu.kryocloud.node.wrapper.NodeWrapperPacketHandlers;
+import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 
 import java.nio.file.Path;
 
@@ -26,38 +29,78 @@ public class KryoNode implements INode {
     private IGroupManager groupManager;
     private IServiceManager serviceManager;
 
-    private NetServer netServer;
+    private KryoProtocolServer protocolServer;
+    private NodeWrapperRegistry wrapperRegistry;
+    private NodeWrapperPacketHandlers wrapperPacketHandlers;
+    private NodeServiceScheduler serviceScheduler;
 
     public KryoNode() {
-        this.start();
+        start();
     }
 
     public void start() {
         try {
-            this.configProvider = new ConfigProvider();
-            LaunchConfig launchConfig = this.configProvider.registerConfig(Path.of("launch.cfg"), LaunchConfig.class);
+            configProvider = new ConfigProvider();
 
-            this.databaseProvider = new DatabaseProvider();
-            this.templateManager = new TemplateManager(this.configProvider);
-            this.groupManager = new GroupManager();
-            this.serviceManager = new ServiceManager();
+            LaunchConfig launchConfig = configProvider.registerConfig(Path.of("launch.cfg"), LaunchConfig.class);
+            NodeSecurityConfig securityConfig = configProvider.registerConfig(Path.of("security.cfg"), NodeSecurityConfig.class);
+            AuthManager.registerToken(securityConfig.getToken());
 
-            PacketRegistry.register(0x01, AuthPacket::new);
-            this.netServer = new NetServer(launchConfig.getPort());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+            databaseProvider = new DatabaseProvider();
+            templateManager = new TemplateManager(configProvider);
+            groupManager = new GroupManager();
+            serviceManager = new ServiceManager();
+
+            wrapperRegistry = new NodeWrapperRegistry();
+            wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry);
+            serviceScheduler = new NodeServiceScheduler(wrapperRegistry);
+
+            wrapperPacketHandlers.register();
+
+            protocolServer = new KryoProtocolServer(launchConfig.getPort());
+            protocolServer.start();
+        } catch (Exception exception) {
+            shutdown();
+            throw new RuntimeException("Failed to start KryoNode", exception);
         }
     }
 
     public void shutdown() {
-        this.configProvider.unregisterConfig(LaunchConfig.class);
+        if (wrapperPacketHandlers != null) {
+            wrapperPacketHandlers.close();
+            wrapperPacketHandlers = null;
+        }
 
-        this.netServer.close();
+        if (protocolServer != null) {
+            protocolServer.close();
+            protocolServer = null;
+        }
+
+        if (wrapperRegistry != null) {
+            wrapperRegistry.clear();
+            wrapperRegistry = null;
+        }
+
+        serviceScheduler = null;
+
+        if (configProvider != null) {
+            configProvider.unregisterConfig(NodeSecurityConfig.class);
+            configProvider.unregisterConfig(LaunchConfig.class);
+            configProvider = null;
+        }
     }
 
-    static void main() {
+    public NodeWrapperRegistry wrapperRegistry() {
+        return wrapperRegistry;
+    }
+
+    public NodeServiceScheduler serviceScheduler() {
+        return serviceScheduler;
+    }
+
+    public static void main(String[] args) {
         KryoNode node = new KryoNode();
-        Runtime.getRuntime().addShutdownHook(new Thread(node::shutdown));
+        Runtime.getRuntime().addShutdownHook(new Thread(node::shutdown, "kryocloud-node-shutdown"));
     }
 
     @Override
@@ -84,5 +127,4 @@ public class KryoNode implements INode {
     public IServiceManager serviceManager() {
         return serviceManager;
     }
-
 }

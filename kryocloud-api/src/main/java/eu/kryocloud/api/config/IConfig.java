@@ -8,5 +8,6 @@ public interface IConfig {
     void addDefault(String key, Object value);
     void put(String key, Object value);
     <T> T get(String key, Class<T> type);
+    <T> T getProvider();
 
 }

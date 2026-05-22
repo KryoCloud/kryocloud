@@ -7,11 +7,13 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ConfigProvider implements IConfigProvider {
 
-    private static final HashMap<Class<?>, IConfig> configurations = new HashMap<>();;
-    private static final HashMap<Class<?>, IConfigTypeProvider> typeProviderOverrides = new HashMap<>();;
+    private static final Map<Class<?>, IConfig> configurations = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, IConfigTypeProvider> typeProviderOverrides = new ConcurrentHashMap<>();
 
     @Override
     public <T> T registerConfig(Path path, Class<T> clazz) throws Exception {
@@ -27,12 +29,9 @@ public class ConfigProvider implements IConfigProvider {
 
     @Override
     public void unregisterConfig(Class<?> clazz) {
-        if (configurations.containsKey(clazz)) {
-            configurations.remove(clazz);
-        }
-        if (typeProviderOverrides.containsKey(clazz)) {
-            configurations.remove(clazz);
-        }
+        if(clazz == null) return;
+        IConfig config = configurations.remove(clazz);
+        typeProviderOverrides.remove(config.getProvider());
     }
 
     @Override

@@ -77,6 +77,11 @@ public abstract class Config implements IConfig {
     }
 
     @Override
+    public IConfigTypeProvider getProvider() {
+        return provider;
+    }
+
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClass().getSimpleName()).append("{");

@@ -1,17 +1,16 @@
 package eu.kryocloud.network.packet;
 
-import eu.kryocloud.network.connection.Connection;
+import eu.kryocloud.network.connection.KryoConnection;
 
 public abstract class Packet {
 
     public abstract int getId();
 
-    public abstract void write(PacketByteBuffer buf);
+    public abstract void write(PacketByteBuffer buffer);
 
-    public abstract void read(PacketByteBuffer buf);
+    public abstract void read(PacketByteBuffer buffer);
 
-    public void handle(Connection connection) {
-        // optional Override
+    @Deprecated
+    public void handle(KryoConnection connection) {
     }
-
 }

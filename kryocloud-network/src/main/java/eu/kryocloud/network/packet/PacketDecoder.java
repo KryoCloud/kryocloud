@@ -6,53 +6,27 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 
 import java.util.List;
 
-public class PacketDecoder extends ByteToMessageDecoder {
-
-    private static final int MAX_PACKET_SIZE = 1024 * 1024;
+public final class PacketDecoder extends ByteToMessageDecoder {
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        if(in.readableBytes() < 4) {
+    protected void decode(ChannelHandlerContext context, ByteBuf input, List<Object> output) throws Exception {
+        if(input.readableBytes() < Integer.BYTES) {
             return;
         }
 
-        in.markReaderIndex();
-
-        int frameLength = in.readInt();
-
-        if (frameLength <= 0) {
-            ctx.close();
-            throw new IllegalStateException("Invalid frame length: " + frameLength);
-        }
-
-        if (frameLength > MAX_PACKET_SIZE) {
-            ctx.close();
-            throw new IllegalStateException("Frame length exceeds maximum allowed size: " + frameLength);
-        }
-
-        if (in.readableBytes() < frameLength) {
-            in.resetReaderIndex();
-            return;
-        }
-
-        ByteBuf frame = in.readSlice(frameLength);
-        PacketByteBuffer buffer = new PacketByteBuffer(frame);
-
+        PacketByteBuffer buffer = new PacketByteBuffer(input);
         int packetId = buffer.readInt();
-        Packet packet = PacketRegistry.create(packetId);
-
-        if (packet == null) {
-            ctx.close();
-            throw new IllegalStateException("Unknown packet id: " + packetId);
-        }
+        Packet packet = PacketRegistry.createOrThrow(packetId);
 
         packet.read(buffer);
 
-        if (buffer.readableBytes() != 0) {
-            ctx.close();
-            throw new IllegalStateException("Packet " + packet.getClass().getSimpleName() + " has unread bytes left: " + buffer.readableBytes());
+        if(buffer.readableBytes() != 0) {
+            throw new IllegalStateException(
+                    "Packet " + packet.getClass().getSimpleName() +
+                            " has unread bytes left: " + buffer.readableBytes()
+            );
         }
 
-        out.add(packet);
+        output.add(packet);
     }
 }

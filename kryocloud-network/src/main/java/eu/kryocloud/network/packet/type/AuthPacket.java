@@ -1,15 +1,16 @@
 package eu.kryocloud.network.packet.type;
 
-import eu.kryocloud.network.auth.AuthManager;
-import eu.kryocloud.network.connection.Connection;
+import eu.kryocloud.network.KryoProtocol;
 import eu.kryocloud.network.packet.Packet;
 import eu.kryocloud.network.packet.PacketByteBuffer;
 
-public class AuthPacket extends Packet {
+@Deprecated
+public final class AuthPacket extends Packet {
 
     private String token;
 
-    public AuthPacket() {}
+    public AuthPacket() {
+    }
 
     public AuthPacket(String token) {
         this.token = token;
@@ -17,32 +18,28 @@ public class AuthPacket extends Packet {
 
     @Override
     public int getId() {
-        return 0x01;
+        return KryoProtocol.LEGACY_AUTH_PACKET_ID;
     }
 
     @Override
-    public void write(PacketByteBuffer buf) {
-        buf.writeString(token);
-    }
-
-    @Override
-    public void read(PacketByteBuffer buf) {
-        this.token = buf.readString();
-    }
-
-    @Override
-    public void handle(Connection connection) {
-        boolean valid = AuthManager.validate(token);
-
-        if (!valid) {
-            connection.getChannel().close();
-            return;
+    public void write(PacketByteBuffer buffer) {
+        if (buffer == null) {
+            throw new IllegalArgumentException("buffer must not be null");
         }
 
-        System.out.println("Client authed: " + token);
+        buffer.writeString(token);
     }
 
-    public String getToken() {
+    @Override
+    public void read(PacketByteBuffer buffer) {
+        if (buffer == null) {
+            throw new IllegalArgumentException("buffer must not be null");
+        }
+
+        token = buffer.readString();
+    }
+
+    public String token() {
         return token;
     }
 }
