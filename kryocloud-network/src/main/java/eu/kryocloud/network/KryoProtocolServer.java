@@ -2,7 +2,6 @@ package eu.kryocloud.network;
 
 import eu.kryocloud.network.channel.KryoChannelInitializer;
 import eu.kryocloud.network.connection.KryoConnection;
-import eu.kryocloud.network.packet.KryoPackets;
 import eu.kryocloud.network.packet.Packet;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
