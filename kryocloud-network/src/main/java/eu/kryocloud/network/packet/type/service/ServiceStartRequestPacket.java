@@ -1,4 +1,3 @@
-// kryocloud-network/src/main/java/eu/kryocloud/network/packet/type/service/ServiceStartRequestPacket.java
 package eu.kryocloud.network.packet.type.service;
 
 import eu.kryocloud.network.KryoProtocol;

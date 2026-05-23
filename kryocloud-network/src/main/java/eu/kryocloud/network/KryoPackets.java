@@ -6,6 +6,12 @@ import eu.kryocloud.network.packet.type.AuthPacket;
 import eu.kryocloud.network.packet.type.protocol.HandshakePacket;
 import eu.kryocloud.network.packet.type.protocol.HandshakeResponsePacket;
 import eu.kryocloud.network.packet.type.protocol.HeartbeatPacket;
+import eu.kryocloud.network.packet.type.service.ServiceCleanupRequestPacket;
+import eu.kryocloud.network.packet.type.service.ServiceCleanupResponsePacket;
+import eu.kryocloud.network.packet.type.service.ServiceCommandRequestPacket;
+import eu.kryocloud.network.packet.type.service.ServiceCommandResponsePacket;
+import eu.kryocloud.network.packet.type.service.ServiceLogsRequestPacket;
+import eu.kryocloud.network.packet.type.service.ServiceLogsResponsePacket;
 import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStatePacket;
 import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
@@ -38,6 +44,12 @@ public final class KryoPackets {
             register(KryoProtocol.SERVICE_START_REQUEST_PACKET_ID, ServiceStartRequestPacket.class, ServiceStartRequestPacket::new);
             register(KryoProtocol.SERVICE_STOP_REQUEST_PACKET_ID, ServiceStopRequestPacket.class, ServiceStopRequestPacket::new);
             register(KryoProtocol.SERVICE_STATE_PACKET_ID, ServiceStatePacket.class, ServiceStatePacket::new);
+            register(KryoProtocol.SERVICE_COMMAND_REQUEST_PACKET_ID, ServiceCommandRequestPacket.class, ServiceCommandRequestPacket::new);
+            register(KryoProtocol.SERVICE_COMMAND_RESPONSE_PACKET_ID, ServiceCommandResponsePacket.class, ServiceCommandResponsePacket::new);
+            register(KryoProtocol.SERVICE_LOGS_REQUEST_PACKET_ID, ServiceLogsRequestPacket.class, ServiceLogsRequestPacket::new);
+            register(KryoProtocol.SERVICE_LOGS_RESPONSE_PACKET_ID, ServiceLogsResponsePacket.class, ServiceLogsResponsePacket::new);
+            register(KryoProtocol.SERVICE_CLEANUP_REQUEST_PACKET_ID, ServiceCleanupRequestPacket.class, ServiceCleanupRequestPacket::new);
+            register(KryoProtocol.SERVICE_CLEANUP_RESPONSE_PACKET_ID, ServiceCleanupResponsePacket.class, ServiceCleanupResponsePacket::new);
 
             register(KryoProtocol.LEGACY_AUTH_PACKET_ID, AuthPacket.class, AuthPacket::new);
         } catch (RuntimeException exception) {

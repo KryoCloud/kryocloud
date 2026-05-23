@@ -8,7 +8,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoop;
 
 import java.time.Duration;
-import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -17,7 +16,11 @@ public final class NettyOffloader {
     private final CloudScheduler scheduler;
 
     public NettyOffloader(CloudScheduler scheduler) {
-        this.scheduler = Objects.requireNonNull(scheduler);
+        if (scheduler == null) {
+            throw new IllegalArgumentException("scheduler must not be null");
+        }
+
+        this.scheduler = scheduler;
     }
 
     public <T> ScheduledTask<T> offload(TaskKind kind, ChannelHandlerContext ctx, Supplier<T> work, Consumer<T> onResult) {

@@ -8,7 +8,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public record CloudGroup(UUID uniqueId, String name, String javaVersion, String templateName, ServiceType serviceType, Collection<IService> services, int serviceCount, int minCount, int maxCount, int minMemory, int maxMemory, int maxPlayers, int startNewPercent) implements IGroup {
+public record CloudGroup(UUID uniqueId, String name, String javaVersion, String templateName, String software, String softwareVersion, ServiceType serviceType, Collection<IService> services, int serviceCount, int minCount, int maxCount, int minMemory, int maxMemory, int maxPlayers, int startNewPercent, int basePort, boolean staticServices, boolean installOnStart) implements IGroup {
 
     public CloudGroup {
         if (uniqueId == null) {
@@ -25,6 +25,14 @@ public record CloudGroup(UUID uniqueId, String name, String javaVersion, String 
 
         if (templateName == null || templateName.isBlank()) {
             throw new IllegalArgumentException("templateName must not be blank");
+        }
+
+        if (software == null || software.isBlank()) {
+            throw new IllegalArgumentException("software must not be blank");
+        }
+
+        if (softwareVersion == null || softwareVersion.isBlank()) {
+            throw new IllegalArgumentException("softwareVersion must not be blank");
         }
 
         if (serviceType == null) {
@@ -61,6 +69,10 @@ public record CloudGroup(UUID uniqueId, String name, String javaVersion, String 
 
         if (startNewPercent < 0 || startNewPercent > 100) {
             throw new IllegalArgumentException("startNewPercent must be between 0 and 100");
+        }
+
+        if (basePort < 1 || basePort > 65_535) {
+            throw new IllegalArgumentException("basePort must be between 1 and 65535");
         }
 
         services = List.copyOf(services);

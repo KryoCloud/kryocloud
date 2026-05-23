@@ -33,7 +33,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public boolean offer(E e) {
-        Objects.requireNonNull(e);
+        requireNonNull(e, "element");
         lock.lock();
         try {
             if (delegate.size() >= capacity) return false;
@@ -47,7 +47,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public void put(E e) throws InterruptedException {
-        Objects.requireNonNull(e);
+        requireNonNull(e, "element");
         lock.lockInterruptibly();
         try {
             while (delegate.size() >= capacity) {
@@ -62,7 +62,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
-        Objects.requireNonNull(e);
+        requireNonNull(e, "element");
         long nanos = unit.toNanos(timeout);
         lock.lockInterruptibly();
         try {
@@ -218,12 +218,12 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public boolean addAll(Collection<? extends E> c) {
-        Objects.requireNonNull(c, "collection");
+        requireNonNull(c, "collection");
         lock.lock();
         try {
             boolean changed = false;
             for (E e : c) {
-                Objects.requireNonNull(e);
+                requireNonNull(e, "element");
                 if (delegate.size() >= capacity) break;
                 delegate.offer(new SequencedEntry<>(e, sequencer.getAndIncrement()));
                 changed = true;
@@ -237,7 +237,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public boolean removeAll(Collection<?> c) {
-        Objects.requireNonNull(c, "collection");
+        requireNonNull(c, "collection");
         lock.lock();
         try {
             boolean changed = delegate.removeIf(entry -> c.contains(entry.element));
@@ -250,7 +250,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public boolean retainAll(Collection<?> c) {
-        Objects.requireNonNull(c, "collection");
+        requireNonNull(c, "collection");
         lock.lock();
         try {
             boolean changed = delegate.removeIf(entry -> !c.contains(entry.element));
@@ -279,7 +279,7 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
 
     @Override
     public int drainTo(Collection<? super E> c, int maxElements) {
-        Objects.requireNonNull(c, "target collection must not be null");
+        requireNonNull(c, "target collection");
         if (c == this) throw new IllegalArgumentException("cannot drain to self");
         lock.lock();
         try {
@@ -358,6 +358,14 @@ public final class BoundedPriorityQueue<E> implements BlockingQueue<E> {
         E item = peek();
         if (item == null) throw new NoSuchElementException();
         return item;
+    }
+
+    private static <T> T requireNonNull(T value, String name) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+
+        return value;
     }
 
     private record SequencedEntry<E>(E element, long sequence) {

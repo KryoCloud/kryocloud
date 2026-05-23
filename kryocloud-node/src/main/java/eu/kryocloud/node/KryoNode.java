@@ -2,11 +2,12 @@ package eu.kryocloud.node;
 
 import eu.kryocloud.api.config.IConfigProvider;
 import eu.kryocloud.api.database.IDatabaseProvider;
-import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.api.node.INode;
 import eu.kryocloud.api.service.IServiceManager;
-import eu.kryocloud.api.template.ITemplateManager;
 import eu.kryocloud.common.config.ConfigProvider;
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
+import eu.kryocloud.common.logging.KryoLogger;
+import eu.kryocloud.common.manifest.ManifestRepository;
 import eu.kryocloud.network.KryoProtocolServer;
 import eu.kryocloud.network.auth.AuthManager;
 import eu.kryocloud.node.config.LaunchConfig;
@@ -21,13 +22,16 @@ import eu.kryocloud.node.service.runtime.NodeServicePacketHandlers;
 import eu.kryocloud.node.service.runtime.NodeServiceRegistry;
 import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
 import eu.kryocloud.node.template.TemplateManager;
+import eu.kryocloud.node.version.NodeVersionStorage;
 import eu.kryocloud.node.wrapper.NodeWrapperPacketHandlers;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 
-import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class KryoNode implements INode {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Node");
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -43,6 +47,7 @@ public class KryoNode implements INode {
     private NodeServiceRegistry serviceRegistry;
     private NodeServicePacketHandlers servicePacketHandlers;
     private NodeServiceScheduler serviceScheduler;
+    private NodeVersionStorage versionStorage;
     private KryoConsole console;
 
     public KryoNode() {
@@ -55,16 +60,20 @@ public class KryoNode implements INode {
         }
 
         try {
+            KryoDirectoryLayout.ensureNodeDirectories();
+
             configProvider = new ConfigProvider();
 
-            LaunchConfig launchConfig = configProvider.registerConfig(Path.of("launch.cfg"), LaunchConfig.class);
-            NodeSecurityConfig securityConfig = configProvider.registerConfig(Path.of("security.cfg"), NodeSecurityConfig.class);
+            LaunchConfig launchConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("launch.cfg"), LaunchConfig.class);
+            NodeSecurityConfig securityConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("security.cfg"), NodeSecurityConfig.class);
             AuthManager.registerToken(securityConfig.getToken());
 
             databaseProvider = new DatabaseProvider();
             templateManager = new TemplateManager(configProvider);
             groupManager = new GroupManager(configProvider);
             serviceManager = new ServiceManager();
+
+            versionStorage = new NodeVersionStorage(KryoDirectoryLayout.VERSIONS, KryoDirectoryLayout.TEMPLATES, ManifestRepository.defaults(), Duration.ofSeconds(60));
 
             wrapperRegistry = new NodeWrapperRegistry();
             wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry);
@@ -74,7 +83,7 @@ public class KryoNode implements INode {
             servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry);
             servicePacketHandlers.register();
 
-            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager);
+            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, versionStorage);
 
             protocolServer = new KryoProtocolServer(launchConfig.getPort());
             protocolServer.start();
@@ -82,6 +91,8 @@ public class KryoNode implements INode {
             CommandRegistry commandRegistry = NodeConsoleCommands.createDefaultRegistry();
             console = new KryoConsole(this, commandRegistry);
             console.start();
+
+            LOGGER.success("KryoCloud node started on port " + launchConfig.getPort());
         } catch (Exception exception) {
             shutdown();
             throw new RuntimeException("Failed to start KryoNode", exception);
@@ -124,6 +135,7 @@ public class KryoNode implements INode {
         }
 
         serviceScheduler = null;
+        versionStorage = null;
 
         if (configProvider != null) {
             configProvider.unregisterConfig(NodeSecurityConfig.class);
@@ -131,7 +143,7 @@ public class KryoNode implements INode {
             configProvider = null;
         }
 
-        System.out.println("KryoCloud node stopped.");
+        LOGGER.success("KryoCloud node stopped.");
     }
 
     public NodeWrapperRegistry wrapperRegistry() {
@@ -144,6 +156,10 @@ public class KryoNode implements INode {
 
     public NodeServiceScheduler serviceScheduler() {
         return serviceScheduler;
+    }
+
+    public NodeVersionStorage versionStorage() {
+        return versionStorage;
     }
 
     public static void main(String[] args) {
@@ -162,12 +178,12 @@ public class KryoNode implements INode {
     }
 
     @Override
-    public ITemplateManager templateManager() {
+    public TemplateManager templateManager() {
         return templateManager;
     }
 
     @Override
-    public IGroupManager groupManager() {
+    public GroupManager groupManager() {
         return groupManager;
     }
 

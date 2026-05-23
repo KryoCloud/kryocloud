@@ -1,8 +1,12 @@
 package eu.kryocloud.node.service.runtime;
 
+import eu.kryocloud.common.logging.TextColor;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
 import eu.kryocloud.network.packet.bus.PacketContext;
 import eu.kryocloud.network.packet.bus.PacketSubscription;
+import eu.kryocloud.network.packet.type.service.ServiceCleanupResponsePacket;
+import eu.kryocloud.network.packet.type.service.ServiceCommandResponsePacket;
+import eu.kryocloud.network.packet.type.service.ServiceLogsResponsePacket;
 import eu.kryocloud.network.packet.type.service.ServiceStatePacket;
 import eu.kryocloud.network.protocol.PeerType;
 
@@ -30,6 +34,9 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
         }
 
         subscriptions.add(KryoPacketBus.listen(ServiceStatePacket.class, this::handleServiceState));
+        subscriptions.add(KryoPacketBus.listen(ServiceCommandResponsePacket.class, this::handleCommandResponse));
+        subscriptions.add(KryoPacketBus.listen(ServiceLogsResponsePacket.class, this::handleLogsResponse));
+        subscriptions.add(KryoPacketBus.listen(ServiceCleanupResponsePacket.class, this::handleCleanupResponse));
     }
 
     @Override
@@ -52,7 +59,76 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
         }
 
         NodeServiceSnapshot snapshot = serviceRegistry.update(packet);
-        context.printState("Service " + snapshot.serviceId() + " is now " + snapshot.state() + " on " + snapshot.wrapperId());
+        context.printState(TextColor.hex("#5EEAD4").apply("Service " + snapshot.serviceId()) + " is now " + stateColor(snapshot.state().name()) + " on " + snapshot.wrapperId());
+    }
+
+    private void handleCommandResponse(PacketContext context, ServiceCommandResponsePacket packet) {
+        if (!validWrapper(context)) {
+            context.connection().close();
+            return;
+        }
+
+        if (packet.success()) {
+            context.printState(TextColor.hex("#3DDC97").apply("Command accepted by " + packet.serviceId() + ": ") + packet.message());
+            return;
+        }
+
+        context.printState(TextColor.hex("#FF5C5C").apply("Command failed for " + packet.serviceId() + ": ") + packet.message());
+    }
+
+    private void handleLogsResponse(PacketContext context, ServiceLogsResponsePacket packet) {
+        if (!validWrapper(context)) {
+            context.connection().close();
+            return;
+        }
+
+        if (!packet.success()) {
+            context.printState(TextColor.hex("#FF5C5C").apply("Logs unavailable for " + packet.serviceId() + ": ") + packet.message());
+            return;
+        }
+
+        context.printState("");
+        context.printState(TextColor.BOLD.code() + TextColor.hex("#F8F9FA").code() + "Logs for " + packet.serviceId() + TextColor.RESET.code());
+        context.printState(TextColor.hex("#8B949E").apply(packet.message()));
+        context.printState(packet.logs().isBlank() ? TextColor.hex("#8B949E").apply("No log lines available.") : packet.logs());
+    }
+
+
+    private void handleCleanupResponse(PacketContext context, ServiceCleanupResponsePacket packet) {
+        if (!validWrapper(context)) {
+            context.connection().close();
+            return;
+        }
+
+        String mode = packet.dryRun() ? "cleanup preview" : "cleanup";
+        String title = TextColor.hex("#3DDC97").apply("Wrapper " + packet.wrapperId() + " " + mode + " finished");
+        context.printState(title + TextColor.hex("#B6F09C").apply(" scanned=" + packet.scanned()) + TextColor.hex("#7DD3FC").apply(" deleted=" + packet.deleted()) + TextColor.hex("#FDE68A").apply(" skipped=" + packet.skipped()) + TextColor.hex("#FDA4AF").apply(" failed=" + packet.failed()));
+
+        if (packet.details().isBlank()) {
+            return;
+        }
+
+        context.printState(TextColor.hex("#D8B4FE").apply(packet.details()));
+    }
+
+    private String stateColor(String state) {
+        if ("RUNNING".equals(state)) {
+            return TextColor.hex("#3DDC97").apply(state);
+        }
+
+        if ("FAILED".equals(state)) {
+            return TextColor.hex("#FF5C5C").apply(state);
+        }
+
+        if ("STOPPED".equals(state)) {
+            return TextColor.hex("#8B949E").apply(state);
+        }
+
+        if ("STOPPING".equals(state)) {
+            return TextColor.hex("#FFD166").apply(state);
+        }
+
+        return TextColor.hex("#D0D7DE").apply(state);
     }
 
     private boolean validWrapper(PacketContext context) {

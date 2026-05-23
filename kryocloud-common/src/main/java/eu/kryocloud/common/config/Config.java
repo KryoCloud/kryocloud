@@ -7,7 +7,6 @@ import eu.kryocloud.common.config.type.ConfigType;
 
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class Config implements IConfig {
@@ -17,7 +16,11 @@ public abstract class Config implements IConfig {
     private final Map<String, Object> defaults = new ConcurrentHashMap<>();
 
     public Config(Path file) {
-        this.file = Objects.requireNonNull(file);
+        if (file == null) {
+            throw new IllegalArgumentException("file must not be null");
+        }
+
+        this.file = file;
         ConfigType type = ConfigType.fromFileName(file.getFileName().toString());
         this.provider = type.getTypeProvider();
     }
@@ -32,13 +35,14 @@ public abstract class Config implements IConfig {
                     if (provider.contains(key)) {
                         return;
                     }
+
                     provider.set(key, value);
                 });
             }
 
             ConfigDecoder.decode(this, provider);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load config: " + file, e);
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to load config: " + file, exception);
         }
     }
 
@@ -46,8 +50,8 @@ public abstract class Config implements IConfig {
     public void save() {
         try {
             provider.save(file, this);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to save config: " + file, e);
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to save config: " + file, exception);
         }
     }
 
@@ -63,6 +67,7 @@ public abstract class Config implements IConfig {
         if (provider.contains(path)) {
             return;
         }
+
         provider.set(path, value);
     }
 
@@ -81,29 +86,33 @@ public abstract class Config implements IConfig {
         return provider;
     }
 
+    public Path file() {
+        return file;
+    }
+
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(this.getClass().getSimpleName()).append("{");
+        StringBuilder builder = new StringBuilder();
+        builder.append(getClass().getSimpleName()).append("{");
 
-        java.lang.reflect.Field[] fields = this.getClass().getDeclaredFields();
-        for (int i = 0; i < fields.length; i++) {
-            java.lang.reflect.Field field = fields[i];
+        java.lang.reflect.Field[] fields = getClass().getDeclaredFields();
+
+        for (int index = 0; index < fields.length; index++) {
+            java.lang.reflect.Field field = fields[index];
             field.setAccessible(true);
+
             try {
-                sb.append(field.getName()).append("=").append(field.get(this));
-                if (i < fields.length - 1) {
-                    sb.append(", ");
-                }
-            } catch (IllegalAccessException e) {
-                sb.append(field.getName()).append("=<inaccessible>");
-                if (i < fields.length - 1) {
-                    sb.append(", ");
-                }
+                builder.append(field.getName()).append("=").append(field.get(this));
+            } catch (IllegalAccessException exception) {
+                builder.append(field.getName()).append("=<inaccessible>");
+            }
+
+            if (index < fields.length - 1) {
+                builder.append(", ");
             }
         }
 
-        sb.append("}");
-        return sb.toString();
+        builder.append("}");
+        return builder.toString();
     }
 }

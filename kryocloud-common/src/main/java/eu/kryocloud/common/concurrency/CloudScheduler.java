@@ -8,7 +8,6 @@ import eu.kryocloud.common.concurrency.rejection.*;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -45,7 +44,7 @@ public final class CloudScheduler implements AutoCloseable {
     }
 
     public CloudScheduler(SchedulerConfig config) {
-        this.config = Objects.requireNonNull(config);
+        this.config = requireNonNull(config, "config");
         this.metrics = new SchedulerMetrics(config.metricsEnabled());
 
         this.cpuQueue = new BoundedPriorityQueue<>(config.maxQueuedTasksPerPool(), PRIORITY_COMPARATOR);
@@ -64,6 +63,14 @@ public final class CloudScheduler implements AutoCloseable {
         this.backgroundPool = new ThreadPoolExecutor(config.backgroundPoolSize(), config.backgroundPoolSize(), 0L, TimeUnit.MILLISECONDS, bgQueue, Thread.ofPlatform().name("kryocloud-bg-", 0).daemon(true).priority(Thread.MIN_PRIORITY).uncaughtExceptionHandler(uncaughtHandler).factory(), new ThreadPoolExecutor.AbortPolicy());
 
         this.timeoutWatcher = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("kryocloud-timeout-watcher").daemon(true).uncaughtExceptionHandler(uncaughtHandler).factory());
+    }
+
+    private static <T> T requireNonNull(T value, String name) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+
+        return value;
     }
 
     private static SchedulerRejectionHandler createRejectionHandler(RejectionPolicy policy, BlockingQueue<Runnable> queue, SchedulerConfig config) {
@@ -88,8 +95,8 @@ public final class CloudScheduler implements AutoCloseable {
     }
 
     public <T> ScheduledTask<T> submit(TaskKind kind, String name, TaskPriority priority, Duration timeout, Supplier<T> task) {
-        Objects.requireNonNull(kind);
-        Objects.requireNonNull(task);
+        requireNonNull(kind, "kind");
+        requireNonNull(task, "task");
 
         if (shutdown.get()) {
             throw new SchedulerShutdownException();

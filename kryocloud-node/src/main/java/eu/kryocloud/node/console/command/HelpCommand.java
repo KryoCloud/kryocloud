@@ -56,7 +56,7 @@ public final class HelpCommand implements ConsoleCommand {
             context.header(category.displayName());
 
             for (ConsoleCommand command : commands.stream().sorted(Comparator.comparing(ConsoleCommand::name)).toList()) {
-                context.print(" • " + context.code(command.usage()) + " - " + command.description());
+                context.bullet(context.code(command.usage()) + context.muted("  —  ") + command.description());
             }
         }
     }

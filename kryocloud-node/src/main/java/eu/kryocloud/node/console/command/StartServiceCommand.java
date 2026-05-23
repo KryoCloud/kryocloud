@@ -1,5 +1,6 @@
 package eu.kryocloud.node.console.command;
 
+import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.network.protocol.CloudServiceType;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
@@ -30,7 +31,7 @@ public final class StartServiceCommand implements ConsoleCommand {
 
     @Override
     public String description() {
-        return "Starts services from a cloud group or manually";
+        return "Starts Minecraft services from a group or manually";
     }
 
     @Override
@@ -54,18 +55,29 @@ public final class StartServiceCommand implements ConsoleCommand {
 
     private void startGroup(ConsoleContext context, List<String> arguments) {
         String groupName = arguments.getFirst();
-        int count = 1;
+        int count = defaultCount(context, groupName);
 
         if (arguments.size() >= 2) {
             count = parsePositiveInt(arguments.get(1), "count");
         }
 
         List<ServiceStartResult> results = context.node().serviceScheduler().startGroup(groupName, count);
-        context.print("Started " + results.size() + " service request(s) from group " + groupName + ".");
+
+        context.success("Started " + results.size() + " Minecraft service request(s) from group " + groupName + ".");
 
         for (ServiceStartResult result : results) {
             context.print("  " + result.serviceId() + " -> " + result.wrapperId() + " (" + result.requestId() + ")");
         }
+    }
+
+    private int defaultCount(ConsoleContext context, String groupName) {
+        IGroup group = context.node().groupManager().groupByName(groupName);
+
+        if (group != null) {
+            return Math.max(1, group.serviceCount());
+        }
+
+        return 1;
     }
 
     private void startManual(ConsoleContext context, List<String> arguments) {
@@ -82,7 +94,7 @@ public final class StartServiceCommand implements ConsoleCommand {
         boolean staticService = arguments.size() >= 8 && Boolean.parseBoolean(arguments.get(7));
         ServiceStartResult result = context.node().serviceScheduler().start(new ServiceStartPlan(serviceId, groupName, templateName, serviceType, port, memoryMb, staticService));
 
-        context.print("Manual start request sent.");
+        context.success("Manual Minecraft service start request sent.");
         context.print("  Request: " + result.requestId());
         context.print("  Service: " + result.serviceId());
         context.print("  Wrapper: " + result.wrapperId());

@@ -1,5 +1,6 @@
 package eu.kryocloud.network.packet.bus;
 
+import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.Packet;
 import io.netty.channel.ChannelFuture;
@@ -29,6 +30,6 @@ public record PacketContext(KryoConnection connection, long receivedAtMillis) {
     }
 
     public void printState(String message) {
-        System.out.println(message);
+        ConsoleOutput.println(message);
     }
 }

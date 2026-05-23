@@ -19,17 +19,20 @@ public final class WrapperLaunchConfig extends Config {
     @Comment("Shared protocol token used to authenticate against the node")
     private String token = "change-this-kryocloud-development-token-0001";
 
-    @Comment("Address advertised to the node for services running on this wrapper")
+    @Comment("Address advertised to the node for Minecraft services running on this wrapper")
     private String advertisedAddress = "127.0.0.1";
-
-    @Comment("Directory containing service templates")
-    private String templatesDirectory = "templates";
-
-    @Comment("Directory containing runtime service workspaces")
-    private String servicesDirectory = "services";
 
     @Comment("Maximum memory in MB this wrapper should advertise")
     private int maxMemoryMb = 4096;
+
+    @Comment("Directory containing Java runtimes, for example runtimes/java-21/bin/java")
+    private String javaRuntimesDirectory = "runtimes";
+
+    @Comment("Seconds the wrapper waits for Minecraft readiness log output before marking a service as RUNNING")
+    private int startupProbeSeconds = 90;
+
+    @Comment("Seconds the wrapper waits after sending stop before forcing screen shutdown and deleting temporary workspace")
+    private int shutdownTimeoutSeconds = 30;
 
     public WrapperLaunchConfig(Path path) {
         super(path);
@@ -75,27 +78,35 @@ public final class WrapperLaunchConfig extends Config {
         this.advertisedAddress = advertisedAddress;
     }
 
-    public String getTemplatesDirectory() {
-        return templatesDirectory;
-    }
-
-    public void setTemplatesDirectory(String templatesDirectory) {
-        this.templatesDirectory = templatesDirectory;
-    }
-
-    public String getServicesDirectory() {
-        return servicesDirectory;
-    }
-
-    public void setServicesDirectory(String servicesDirectory) {
-        this.servicesDirectory = servicesDirectory;
-    }
-
     public int getMaxMemoryMb() {
         return maxMemoryMb;
     }
 
     public void setMaxMemoryMb(int maxMemoryMb) {
         this.maxMemoryMb = maxMemoryMb;
+    }
+
+    public String getJavaRuntimesDirectory() {
+        return javaRuntimesDirectory;
+    }
+
+    public void setJavaRuntimesDirectory(String javaRuntimesDirectory) {
+        this.javaRuntimesDirectory = javaRuntimesDirectory;
+    }
+
+    public int getStartupProbeSeconds() {
+        return startupProbeSeconds;
+    }
+
+    public void setStartupProbeSeconds(int startupProbeSeconds) {
+        this.startupProbeSeconds = startupProbeSeconds;
+    }
+
+    public int getShutdownTimeoutSeconds() {
+        return shutdownTimeoutSeconds;
+    }
+
+    public void setShutdownTimeoutSeconds(int shutdownTimeoutSeconds) {
+        this.shutdownTimeoutSeconds = shutdownTimeoutSeconds;
     }
 }

@@ -7,7 +7,7 @@ import java.nio.file.Path;
 
 public final class NodeSecurityConfig extends Config {
 
-    @Comment("Shared protocol token used by wrappers and plugins to authenticate against the node")
+    @Comment("Shared protocol token used by wrappers and addons to authenticate against the node")
     private String token = "change-this-kryocloud-development-token-0001";
 
     public NodeSecurityConfig(Path path) {

@@ -4,7 +4,9 @@ import eu.kryocloud.api.config.IConfigProvider;
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.common.config.type.ConfigType;
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.node.config.LaunchConfig;
+import eu.kryocloud.node.config.group.GroupConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,7 +23,7 @@ public final class GroupManager implements IGroupManager {
     private final ConcurrentMap<UUID, IGroup> groupsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, UUID> groupIdByName = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, GroupConfig> configsByName = new ConcurrentHashMap<>();
-    private final Path groupsDirectory = Path.of("groups");
+    private final Path groupsDirectory = KryoDirectoryLayout.GROUPS;
     private final ConfigType configType;
 
     public GroupManager(IConfigProvider configProvider) {
@@ -41,13 +43,55 @@ public final class GroupManager implements IGroupManager {
     }
 
     @Override
-    public void createGroup(IGroup group) {
+    public IGroup createGroup(IGroup group) {
         if (group == null) {
             throw new IllegalArgumentException("group must not be null");
         }
 
+        String normalizedName = normalize(group.name());
+
+        if (groupIdByName.containsKey(normalizedName)) {
+            throw new IllegalStateException("Group already exists: " + group.name());
+        }
+
         groupsById.put(group.uniqueId(), group);
-        groupIdByName.put(normalize(group.name()), group.uniqueId());
+        groupIdByName.put(normalizedName, group.uniqueId());
+
+        return group;
+    }
+
+    public IGroup createGroup(GroupConfig config) {
+        if (config == null) {
+            throw new IllegalArgumentException("config must not be null");
+        }
+
+        IGroup group = config.toGroup();
+
+        if (existsGroup(group.name())) {
+            throw new IllegalStateException("Group already exists: " + group.name());
+        }
+
+        config.save();
+        createGroup(group);
+        configsByName.put(normalize(group.name()), config);
+
+        return group;
+    }
+
+    public GroupConfig createConfig(String groupName) {
+        validateName(groupName);
+
+        if (existsGroup(groupName)) {
+            throw new IllegalStateException("Group already exists: " + groupName);
+        }
+
+        try {
+            Files.createDirectories(groupsDirectory);
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to create group config directory", exception);
+        }
+
+        return new GroupConfig(groupsDirectory.resolve(groupName + configType.getEnding()));
     }
 
     @Override
@@ -128,8 +172,10 @@ public final class GroupManager implements IGroupManager {
             config.load();
             config.save();
 
-            CloudGroup group = config.toGroup();
-            createGroup(group);
+            IGroup group = config.toGroup();
+
+            groupsById.put(group.uniqueId(), group);
+            groupIdByName.put(normalize(group.name()), group.uniqueId());
             configsByName.put(normalize(group.name()), config);
         } catch (Exception exception) {
             throw new RuntimeException("Failed to load group config " + path, exception);
@@ -141,12 +187,13 @@ public final class GroupManager implements IGroupManager {
             return;
         }
 
-        Path path = groupsDirectory.resolve("Lobby" + configType.getEnding());
-        GroupConfig config = new GroupConfig(path);
+        GroupConfig config = new GroupConfig(groupsDirectory.resolve("Lobby" + configType.getEnding()));
         config.save();
 
-        CloudGroup group = config.toGroup();
-        createGroup(group);
+        IGroup group = config.toGroup();
+
+        groupsById.put(group.uniqueId(), group);
+        groupIdByName.put(normalize(group.name()), group.uniqueId());
         configsByName.put(normalize(group.name()), config);
     }
 
@@ -161,6 +208,10 @@ public final class GroupManager implements IGroupManager {
 
         if (name.isBlank()) {
             throw new IllegalArgumentException("name must not be blank");
+        }
+
+        if (!name.matches("[A-Za-z0-9_.-]+")) {
+            throw new IllegalArgumentException("name contains unsupported characters: " + name);
         }
     }
 

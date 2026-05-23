@@ -22,6 +22,12 @@ public final class KryoProtocol {
     public static final int SERVICE_START_REQUEST_PACKET_ID = 0x20;
     public static final int SERVICE_STOP_REQUEST_PACKET_ID = 0x21;
     public static final int SERVICE_STATE_PACKET_ID = 0x22;
+    public static final int SERVICE_COMMAND_REQUEST_PACKET_ID = 0x23;
+    public static final int SERVICE_COMMAND_RESPONSE_PACKET_ID = 0x24;
+    public static final int SERVICE_LOGS_REQUEST_PACKET_ID = 0x25;
+    public static final int SERVICE_LOGS_RESPONSE_PACKET_ID = 0x26;
+    public static final int SERVICE_CLEANUP_REQUEST_PACKET_ID = 0x27;
+    public static final int SERVICE_CLEANUP_RESPONSE_PACKET_ID = 0x28;
 
     @Deprecated
     public static final int LEGACY_AUTH_PACKET_ID = 0x7F;

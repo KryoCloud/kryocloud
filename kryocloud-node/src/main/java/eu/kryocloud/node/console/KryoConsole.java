@@ -3,6 +3,8 @@ package eu.kryocloud.node.console;
 import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.node.KryoNode;
+import eu.kryocloud.node.console.tui.ConsoleIntro;
+import eu.kryocloud.node.console.tui.ConsoleTheme;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -75,13 +77,13 @@ public final class KryoConsole implements AutoCloseable {
     }
 
     private void runConsole() {
-        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).build()) {
-            ConsoleContext context = new ConsoleContext(node, terminal, running);
+        try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
             LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).completer(new StringsCompleter(commandRegistry.commandNames())).build();
+            ConsoleContext context = new ConsoleContext(node, terminal, activeReader, running);
 
             reader = activeReader;
             ConsoleOutput.attach(activeReader);
-            context.success("KryoCloud Node Console started. Type 'help'.");
+            new ConsoleIntro().play(context);
 
             while (running.get()) {
                 readAndExecute(context, activeReader);
@@ -100,9 +102,6 @@ public final class KryoConsole implements AutoCloseable {
         } catch (UserInterruptException exception) {
             context.warn("Use 'stop' to shutdown the node.");
         } catch (EndOfFileException exception) {
-            context.stopConsole();
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
             context.stopConsole();
         } catch (Exception exception) {
             context.error(exception.getMessage());
@@ -128,6 +127,6 @@ public final class KryoConsole implements AutoCloseable {
     }
 
     private String prompt() {
-        return "\u001B[38;2;94;234;212mkryocloud\u001B[0m \u001B[38;2;139;148;158m›\u001B[0m ";
+        return ConsoleTheme.gradient("kryocloud", "#00E5FF", "#A855F7") + " " + ConsoleTheme.PINK.apply("❯") + " ";
     }
 }

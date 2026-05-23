@@ -1,11 +1,11 @@
-// kryocloud-wrapper/src/main/java/eu/kryocloud/wrapper/heartbeat/WrapperHeartbeatTask.java
 package eu.kryocloud.wrapper.heartbeat;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocol;
 import eu.kryocloud.network.KryoProtocolClient;
 import eu.kryocloud.network.packet.type.wrapper.WrapperHeartbeatPacket;
 import eu.kryocloud.network.protocol.WrapperState;
-import eu.kryocloud.wrapper.service.WrapperServiceManager;
+import eu.kryocloud.wrapper.instance.InstanceManager;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -15,13 +15,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class WrapperHeartbeatTask implements AutoCloseable {
 
+    private static final KryoLogger LOGGER = KryoLogger.logger("WrapperHeartbeat");
+
     private final String wrapperId;
     private final KryoProtocolClient protocolClient;
-    private final WrapperServiceManager serviceManager;
+    private final InstanceManager instanceManager;
     private final ScheduledExecutorService executor;
     private final AtomicLong sequence = new AtomicLong();
 
-    public WrapperHeartbeatTask(String wrapperId, KryoProtocolClient protocolClient, WrapperServiceManager serviceManager, ScheduledExecutorService executor) {
+    public WrapperHeartbeatTask(String wrapperId, KryoProtocolClient protocolClient, InstanceManager instanceManager, ScheduledExecutorService executor) {
         if (wrapperId == null || wrapperId.isBlank()) {
             throw new IllegalArgumentException("wrapperId must not be blank");
         }
@@ -30,8 +32,8 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
             throw new IllegalArgumentException("protocolClient must not be null");
         }
 
-        if (serviceManager == null) {
-            throw new IllegalArgumentException("serviceManager must not be null");
+        if (instanceManager == null) {
+            throw new IllegalArgumentException("instanceManager must not be null");
         }
 
         if (executor == null) {
@@ -40,7 +42,7 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
 
         this.wrapperId = wrapperId;
         this.protocolClient = protocolClient;
-        this.serviceManager = serviceManager;
+        this.instanceManager = instanceManager;
         this.executor = executor;
     }
 
@@ -54,9 +56,9 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
                 return;
             }
 
-            protocolClient.send(new WrapperHeartbeatPacket(wrapperId, WrapperState.AVAILABLE, sequence.incrementAndGet(), usedMemoryMb(), maxMemoryMb(), serviceManager.runningServiceCount()));
+            protocolClient.send(new WrapperHeartbeatPacket(wrapperId, WrapperState.AVAILABLE, sequence.incrementAndGet(), usedMemoryMb(), maxMemoryMb(), instanceManager.runningInstanceCount()));
         } catch (Exception exception) {
-            exception.printStackTrace();
+            LOGGER.warn("Failed to send wrapper heartbeat: " + exception.getMessage());
         }
     }
 

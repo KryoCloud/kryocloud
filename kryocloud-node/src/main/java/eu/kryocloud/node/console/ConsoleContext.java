@@ -1,13 +1,15 @@
 package eu.kryocloud.node.console;
 
 import eu.kryocloud.common.logging.ConsoleOutput;
-import eu.kryocloud.common.logging.TextColor;
 import eu.kryocloud.node.KryoNode;
+import eu.kryocloud.node.console.tui.ConsoleTheme;
+import org.jline.reader.LineReader;
 import org.jline.terminal.Terminal;
 
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public record ConsoleContext(KryoNode node, Terminal terminal, AtomicBoolean running) {
+public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader, AtomicBoolean running) {
 
     public ConsoleContext {
         if (node == null) {
@@ -16,6 +18,10 @@ public record ConsoleContext(KryoNode node, Terminal terminal, AtomicBoolean run
 
         if (terminal == null) {
             throw new IllegalArgumentException("terminal must not be null");
+        }
+
+        if (reader == null) {
+            throw new IllegalArgumentException("reader must not be null");
         }
 
         if (running == null) {
@@ -27,45 +33,93 @@ public record ConsoleContext(KryoNode node, Terminal terminal, AtomicBoolean run
         ConsoleOutput.println(message);
     }
 
+    public void raw(String message) {
+        ConsoleOutput.printRaw(message);
+    }
+
     public void success(String message) {
-        print(TextColor.hex("#3DDC97").apply(message));
+        print(ConsoleTheme.success(message));
     }
 
     public void warn(String message) {
-        print(TextColor.hex("#FFD166").apply(message));
+        print(ConsoleTheme.warning(message));
     }
 
     public void error(String message) {
-        print(TextColor.hex("#FF5C5C").apply(message));
+        print(ConsoleTheme.danger(message));
     }
 
     public void header(String message) {
         print("");
-        print(TextColor.BOLD.code() + TextColor.hex("#F8F9FA").code() + message + TextColor.RESET.code());
+        print(ConsoleTheme.title(message));
+        print(ConsoleTheme.divider(Math.max(24, message.length() + 8)));
+    }
+
+    public void row(String label, String value) {
+        print("  " + ConsoleTheme.label(label + ": ") + ConsoleTheme.value(value));
+    }
+
+    public void bullet(String value) {
+        print(" " + ConsoleTheme.bullet() + " " + value);
+    }
+
+    public String ask(String question, String fallback) {
+        String suffix = "";
+
+        if (fallback != null && !fallback.isBlank()) {
+            suffix = " " + muted("[" + fallback + "]");
+        }
+
+        String answer = reader.readLine(ConsoleTheme.PRIMARY.apply(question) + suffix + " ");
+
+        if (answer == null || answer.isBlank()) {
+            return fallback;
+        }
+
+        return answer;
+    }
+
+    public boolean confirm(String question, boolean fallback) {
+        String fallbackText = fallback ? "Y/n" : "y/N";
+
+        while (true) {
+            String answer = ask(question + " " + muted("(" + fallbackText + ")"), fallback ? "y" : "n");
+            String normalized = answer.toLowerCase(Locale.ROOT);
+
+            if ("y".equals(normalized) || "yes".equals(normalized) || "j".equals(normalized) || "ja".equals(normalized)) {
+                return true;
+            }
+
+            if ("n".equals(normalized) || "no".equals(normalized) || "nein".equals(normalized)) {
+                return false;
+            }
+
+            warn("Please answer with y/j or n.");
+        }
     }
 
     public String code(String value) {
-        return TextColor.hex("#D0D7DE").apply(value);
+        return ConsoleTheme.command(value);
     }
 
     public String muted(String value) {
-        return TextColor.hex("#8B949E").apply(value);
+        return ConsoleTheme.muted(value);
     }
 
     public String accent(String value) {
-        return TextColor.hex("#5EEAD4").apply(value);
+        return ConsoleTheme.PRIMARY.apply(value);
     }
 
     public String good(String value) {
-        return TextColor.hex("#3DDC97").apply(value);
+        return ConsoleTheme.success(value);
     }
 
     public String bad(String value) {
-        return TextColor.hex("#FF5C5C").apply(value);
+        return ConsoleTheme.danger(value);
     }
 
     public String yellow(String value) {
-        return TextColor.hex("#FFD166").apply(value);
+        return ConsoleTheme.warning(value);
     }
 
     public void stopConsole() {
