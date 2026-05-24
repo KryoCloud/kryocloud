@@ -94,6 +94,7 @@ public final class KryoConsole implements AutoCloseable {
             reader = activeReader;
             ConsoleOutput.attach(activeReader);
             new ConsoleIntro().play(context);
+            node.markConsoleReady();
 
             while (running.get()) {
                 readAndExecute(context, activeReader);

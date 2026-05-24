@@ -10,6 +10,7 @@ import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.common.manifest.ManifestRepository;
 import eu.kryocloud.network.KryoProtocolServer;
 import eu.kryocloud.network.auth.AuthManager;
+import eu.kryocloud.network.protocol.CloudServiceState;
 import eu.kryocloud.node.config.LaunchConfig;
 import eu.kryocloud.node.config.NodeSecurityConfig;
 import eu.kryocloud.node.config.network.NetworkAddressConfig;
@@ -22,7 +23,6 @@ import eu.kryocloud.node.console.wizard.CloudSetupWizard;
 import eu.kryocloud.node.database.DatabaseProvider;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.ServiceManager;
-import eu.kryocloud.network.protocol.CloudServiceState;
 import eu.kryocloud.node.service.runtime.NodeServicePacketHandlers;
 import eu.kryocloud.node.service.runtime.NodeServiceRegistry;
 import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
@@ -42,6 +42,9 @@ public class KryoNode implements INode {
     private static final KryoLogger LOGGER = KryoLogger.logger("Node");
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean consoleReady = new AtomicBoolean(false);
+    private final AtomicBoolean pendingMinimumReconcile = new AtomicBoolean(false);
+    private final AtomicBoolean reconcilingMinimumServices = new AtomicBoolean(false);
 
     private IConfigProvider configProvider;
     private IDatabaseProvider databaseProvider;
@@ -166,6 +169,15 @@ public class KryoNode implements INode {
         LOGGER.success("KryoCloud node stopped.");
     }
 
+    public void markConsoleReady() {
+        if (!consoleReady.compareAndSet(false, true)) {
+            return;
+        }
+
+        pendingMinimumReconcile.set(true);
+        requestMinimumReconcile("after console intro");
+    }
+
     private void handleServiceStateChanged(NodeServiceSnapshot snapshot) {
         if (snapshot == null) {
             return;
@@ -179,15 +191,7 @@ public class KryoNode implements INode {
             return;
         }
 
-        try {
-            List<?> results = serviceScheduler.reconcileMinimumServices();
-
-            if (!results.isEmpty()) {
-                LOGGER.success("Auto-start requested " + results.size() + " replacement Minecraft service(s) after " + snapshot.serviceId() + " stopped.");
-            }
-        } catch (Exception exception) {
-            LOGGER.warn("Auto-start replacement failed after " + snapshot.serviceId() + " stopped: " + exception.getMessage());
-        }
+        requestMinimumReconcile("after " + snapshot.serviceId() + " stopped");
     }
 
     private void handleWrapperAvailable(WrapperSnapshot snapshot) {
@@ -199,14 +203,44 @@ public class KryoNode implements INode {
             return;
         }
 
+        requestMinimumReconcile("after wrapper availability");
+    }
+
+    private void requestMinimumReconcile(String reason) {
+        if (!running.get()) {
+            return;
+        }
+
+        if (serviceScheduler == null) {
+            pendingMinimumReconcile.set(true);
+            return;
+        }
+
+        if (!consoleReady.get()) {
+            pendingMinimumReconcile.set(true);
+            return;
+        }
+
+        if (!reconcilingMinimumServices.compareAndSet(false, true)) {
+            pendingMinimumReconcile.set(true);
+            return;
+        }
+
         try {
+            pendingMinimumReconcile.set(false);
             List<?> results = serviceScheduler.reconcileMinimumServices();
 
             if (!results.isEmpty()) {
-                LOGGER.success("Auto-start requested " + results.size() + " Minecraft service(s) after wrapper availability.");
+                LOGGER.success("Auto-start requested " + results.size() + " Minecraft service(s) " + reason + ".");
             }
         } catch (Exception exception) {
-            LOGGER.warn("Auto-start reconciliation failed: " + exception.getMessage());
+            LOGGER.warn("Auto-start reconciliation failed " + reason + ": " + exception.getMessage());
+        } finally {
+            reconcilingMinimumServices.set(false);
+        }
+
+        if (pendingMinimumReconcile.getAndSet(false)) {
+            requestMinimumReconcile("after queued startup event");
         }
     }
 
