@@ -1,6 +1,12 @@
 package eu.kryocloud.common.manifest;
 
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -11,7 +17,22 @@ public final class ManifestRepository {
 
     public static ManifestRepository defaults() {
         ManifestRepository repository = new ManifestRepository();
-        repository.register("paper", URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/versions/paper.yaml"));
+
+        Yaml yaml = new Yaml();
+
+        try (InputStream in = URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/versions.yaml").toURL().openStream()) {
+            Map<String, Object> root = yaml.load(in);
+
+            @SuppressWarnings("unchecked")
+            List<String> availableVersions = (List<String>) root.get("available");
+
+            for (String version : availableVersions) {
+                repository.register(version, URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/versions/%s.yaml".formatted(version)));
+            }
+        } catch (IOException exception) {
+            throw new RuntimeException("can't fetch versions");
+        }
+
         return repository;
     }
 
