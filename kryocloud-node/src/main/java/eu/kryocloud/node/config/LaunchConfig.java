@@ -7,11 +7,20 @@ import java.nio.file.Path;
 
 public class LaunchConfig extends Config {
 
-    @Comment("Host to bind the node to")
-    private String host = "127.0.0.1";
+    @Comment("Whether the first-start setup wizard has completed")
+    private boolean setupComplete = false;
 
-    @Comment("Port to bind the node to")
+    @Comment("Host to bind the node protocol to")
+    private String host = "0.0.0.0";
+
+    @Comment("Port to bind the node protocol to")
     private int port = 1130;
+
+    @Comment("Host to bind the future web dashboard to")
+    private String webHost = "127.0.0.1";
+
+    @Comment("Port to bind the future web dashboard to")
+    private int webPort = 8080;
 
     @Comment("File extension for files created by the node")
     private String fileExtension = ".yaml";
@@ -24,6 +33,14 @@ public class LaunchConfig extends Config {
 
     public LaunchConfig(Path path) {
         super(path);
+    }
+
+    public boolean isSetupComplete() {
+        return setupComplete;
+    }
+
+    public void setSetupComplete(boolean setupComplete) {
+        this.setupComplete = setupComplete;
     }
 
     public String getHost() {
@@ -40,6 +57,22 @@ public class LaunchConfig extends Config {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public String getWebHost() {
+        return webHost;
+    }
+
+    public void setWebHost(String webHost) {
+        this.webHost = webHost;
+    }
+
+    public int getWebPort() {
+        return webPort;
+    }
+
+    public void setWebPort(int webPort) {
+        this.webPort = webPort;
     }
 
     public String getFileExtension() {

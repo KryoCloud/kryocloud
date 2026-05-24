@@ -3,6 +3,7 @@ package eu.kryocloud.node.service.schedule;
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.api.service.ServiceType;
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
@@ -18,13 +19,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class NodeServiceScheduler {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Scheduler");
 
     private final NodeWrapperRegistry wrapperRegistry;
     private final IGroupManager groupManager;
     private final NodeServiceRegistry serviceRegistry;
     private final NodeVersionStorage versionStorage;
+    private final AtomicBoolean reconciling = new AtomicBoolean(false);
 
     public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeServiceRegistry serviceRegistry, NodeVersionStorage versionStorage) {
         if (wrapperRegistry == null) {
@@ -96,6 +101,64 @@ public final class NodeServiceScheduler {
         }
 
         return List.copyOf(results);
+    }
+
+    public List<ServiceStartResult> reconcileMinimumServices() {
+        if (!reconciling.compareAndSet(false, true)) {
+            return List.of();
+        }
+
+        try {
+            List<ServiceStartResult> results = new ArrayList<>();
+
+            for (IGroup group : groupManager.groups()) {
+                results.addAll(reconcileGroup(group.name()));
+            }
+
+            return List.copyOf(results);
+        } finally {
+            reconciling.set(false);
+        }
+    }
+
+    public List<ServiceStartResult> reconcileGroup(String groupName) {
+        validateGroupName(groupName);
+
+        IGroup group = groupManager.groupByName(groupName);
+
+        if (group == null) {
+            throw new IllegalArgumentException("Unknown group: " + groupName);
+        }
+
+        int activeServices = serviceRegistry.activeServiceCount(group.name());
+        int missingServices = Math.max(0, group.minCount() - activeServices);
+
+        if (missingServices < 1) {
+            return List.of();
+        }
+
+        LOGGER.info("Auto-starting " + missingServices + " Minecraft service(s) for group " + group.name());
+        return startGroup(group.name(), missingServices);
+    }
+
+    public int stopGroup(String groupName, String reason, boolean force) {
+        validateGroupName(groupName);
+
+        String safeReason = reason == null || reason.isBlank() ? "KryoCloud group stop" : reason;
+        int sent = 0;
+
+        for (NodeServiceSnapshot service : serviceRegistry.services(groupName)) {
+            Optional<KryoConnection> connection = wrapperRegistry.connection(service.wrapperId());
+
+            if (connection.isEmpty()) {
+                continue;
+            }
+
+            connection.get().send(new ServiceStopRequestPacket(UUID.randomUUID(), service.serviceId(), force, safeReason));
+            sent++;
+        }
+
+        return sent;
     }
 
     public int stopAll(String reason, boolean force) {
@@ -181,15 +244,16 @@ public final class NodeServiceScheduler {
 
         while (slot <= maxSlots) {
             int candidate = slot;
+            String serviceId = group.name() + "-" + candidate;
 
-            if (!serviceRegistry.activeGroupSlot(group.name(), candidate) && pendingPlans.stream().noneMatch(plan -> plan.serviceId().equalsIgnoreCase(group.name() + "-" + candidate))) {
+            if (!serviceRegistry.activeServiceId(serviceId) && pendingPlans.stream().noneMatch(plan -> plan.serviceId().equalsIgnoreCase(serviceId))) {
                 return candidate;
             }
 
             slot++;
         }
 
-        throw new IllegalStateException("No free service slot available for group " + group.name() + ". Running services must stop before a new slot can be created.");
+        throw new IllegalStateException("No free service slot available for group " + group.name());
     }
 
     private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber) {

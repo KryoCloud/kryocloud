@@ -3,7 +3,6 @@ package eu.kryocloud.node.console;
 import eu.kryocloud.node.console.command.GroupsCommand;
 import eu.kryocloud.node.console.command.HelpCommand;
 import eu.kryocloud.node.console.command.ServicesCommand;
-import eu.kryocloud.node.console.command.StartServiceCommand;
 import eu.kryocloud.node.console.command.StatsCommand;
 import eu.kryocloud.node.console.command.StopCommand;
 import eu.kryocloud.node.console.command.VersionCommand;
@@ -19,11 +18,10 @@ public final class NodeConsoleCommands {
         registry.register(new HelpCommand(registry));
         registry.register(new StopCommand());
         registry.register(new GroupsCommand());
-        registry.register(new WrappersCommand());
         registry.register(new ServicesCommand());
+        registry.register(new WrappersCommand());
         registry.register(new VersionCommand());
         registry.register(new StatsCommand());
-        registry.register(new StartServiceCommand());
         return registry;
     }
 }

@@ -2,10 +2,11 @@ package eu.kryocloud.node.console;
 
 public enum ConsoleCategory {
 
-    CORE("Core Management"),
-    SERVICE("Minecraft Services"),
-    PLAYER("Minecraft Players"),
-    CLUSTER("Groups & Wrappers");
+    CORE("Core"),
+    GROUP("Groups"),
+    SERVICE("Services"),
+    CLUSTER("Cluster"),
+    PLAYER("Players");
 
     private final String displayName;
 

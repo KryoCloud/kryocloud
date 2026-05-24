@@ -12,6 +12,7 @@ import io.netty.channel.MultiThreadIoEventLoopGroup;
 import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
+import java.net.InetSocketAddress;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -19,6 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public final class KryoProtocolServer implements AutoCloseable {
 
+    private final String host;
     private final int port;
     private final ReentrantLock lifecycleLock = new ReentrantLock();
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -29,10 +31,19 @@ public final class KryoProtocolServer implements AutoCloseable {
     private volatile Channel serverChannel;
 
     public KryoProtocolServer(int port) {
+        this("0.0.0.0", port);
+    }
+
+    public KryoProtocolServer(String host, int port) {
+        if (host == null || host.isBlank()) {
+            throw new IllegalArgumentException("host must not be blank");
+        }
+
         if (port < 1 || port > 65_535) {
             throw new IllegalArgumentException("port must be between 1 and 65535");
         }
 
+        this.host = host;
         this.port = port;
     }
 
@@ -41,7 +52,7 @@ public final class KryoProtocolServer implements AutoCloseable {
 
         try {
             if (running.get()) {
-                throw new IllegalStateException("KryoProtocolServer is already running on port " + port);
+                throw new IllegalStateException("KryoProtocolServer is already running on " + host + ":" + port);
             }
 
             KryoPackets.registerDefaults();
@@ -57,19 +68,16 @@ public final class KryoProtocolServer implements AutoCloseable {
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
                         .childOption(ChannelOption.TCP_NODELAY, true)
-                        .childHandler(new KryoChannelInitializer(
-                                this::registerConnection,
-                                this::unregisterConnection
-                        ));
+                        .childHandler(new KryoChannelInitializer(this::registerConnection, this::unregisterConnection));
 
-                ChannelFuture future = bootstrap.bind(port).sync();
+                ChannelFuture future = bootstrap.bind(new InetSocketAddress(host, port)).sync();
 
                 bossGroup = newBossGroup;
                 workerGroup = newWorkerGroup;
                 serverChannel = future.channel();
                 running.set(true);
 
-                System.out.println("KryoProtocolServer listening on :" + port);
+                System.out.println("KryoProtocolServer listening on " + host + ":" + port);
             } catch (InterruptedException exception) {
                 shutdownGroups(newBossGroup, newWorkerGroup);
                 Thread.currentThread().interrupt();
@@ -81,6 +89,10 @@ public final class KryoProtocolServer implements AutoCloseable {
         } finally {
             lifecycleLock.unlock();
         }
+    }
+
+    public String host() {
+        return host;
     }
 
     public int port() {

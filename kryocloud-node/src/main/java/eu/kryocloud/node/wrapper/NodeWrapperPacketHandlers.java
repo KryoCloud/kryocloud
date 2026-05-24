@@ -10,19 +10,31 @@ import eu.kryocloud.network.protocol.PeerType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 public final class NodeWrapperPacketHandlers implements AutoCloseable {
 
     private final NodeWrapperRegistry wrapperRegistry;
+    private final Consumer<WrapperSnapshot> wrapperAvailableAction;
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
     public NodeWrapperPacketHandlers(NodeWrapperRegistry wrapperRegistry) {
+        this(wrapperRegistry, ignored -> {
+        });
+    }
+
+    public NodeWrapperPacketHandlers(NodeWrapperRegistry wrapperRegistry, Consumer<WrapperSnapshot> wrapperAvailableAction) {
         if (wrapperRegistry == null) {
             throw new IllegalArgumentException("wrapperRegistry must not be null");
         }
 
+        if (wrapperAvailableAction == null) {
+            throw new IllegalArgumentException("wrapperAvailableAction must not be null");
+        }
+
         this.wrapperRegistry = wrapperRegistry;
+        this.wrapperAvailableAction = wrapperAvailableAction;
     }
 
     public void register() {
@@ -40,7 +52,8 @@ public final class NodeWrapperPacketHandlers implements AutoCloseable {
             return;
         }
 
-        wrapperRegistry.register(context.connection(), packet);
+        WrapperSnapshot snapshot = wrapperRegistry.register(context.connection(), packet);
+        wrapperAvailableAction.accept(snapshot);
     }
 
     private void handleWrapperHeartbeat(PacketContext context, WrapperHeartbeatPacket packet) {
@@ -49,12 +62,7 @@ public final class NodeWrapperPacketHandlers implements AutoCloseable {
             return;
         }
 
-        wrapperRegistry.heartbeat(context.connection(), packet)
-                .orElseGet(() -> {
-                    System.out.println("Heartbeat from unknown wrapper " + packet.wrapperId());
-                    context.connection().close();
-                    return null;
-                });
+        wrapperRegistry.heartbeat(context.connection(), packet).ifPresent(wrapperAvailableAction);
     }
 
     private boolean isWrapperConnection(PacketContext context) {

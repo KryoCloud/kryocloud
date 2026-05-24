@@ -58,8 +58,14 @@ public final class GroupSetupWizard {
         context.print("  Template: " + config.getTemplateName());
         context.print("  Software: " + config.getSoftware() + " " + config.getSoftwareVersion());
         context.print("  Static: " + config.isStaticServices());
-        context.print("  Services: " + config.getServiceCount());
-        context.print("  Start: " + context.code("start " + group.name()));
+        context.print("  Minimum services: " + group.minCount());
+
+        if (group.minCount() > 0) {
+            context.node().serviceScheduler().reconcileGroup(group.name());
+            context.info("Auto-start requested for minimum services of " + group.name() + ".");
+        }
+
+        context.print("  Manage: " + context.code("group " + group.name() + " info"));
     }
 
     private void installNow(ConsoleContext context, GroupConfig config) {

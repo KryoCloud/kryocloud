@@ -17,7 +17,7 @@ public final class WrappersCommand implements ConsoleCommand {
 
     @Override
     public String name() {
-        return "wrappers";
+        return "wrapper";
     }
 
     @Override
@@ -27,7 +27,7 @@ public final class WrappersCommand implements ConsoleCommand {
 
     @Override
     public Collection<String> aliases() {
-        return List.of("wrapper", "nodes");
+        return List.of("wrappers", "nodes");
     }
 
     @Override
@@ -37,7 +37,7 @@ public final class WrappersCommand implements ConsoleCommand {
 
     @Override
     public String usage() {
-        return "wrappers [list|info <wrapperId>|timedout]";
+        return "wrapper list | wrapper <id> info | wrapper timedout";
     }
 
     @Override
@@ -61,6 +61,16 @@ public final class WrappersCommand implements ConsoleCommand {
 
         if ("info".equalsIgnoreCase(action)) {
             info(context, arguments);
+            return;
+        }
+
+        if (arguments.size() >= 2 && "info".equalsIgnoreCase(arguments.get(1))) {
+            info(context, List.of("info", arguments.getFirst()));
+            return;
+        }
+
+        if (arguments.size() == 1) {
+            info(context, List.of("info", arguments.getFirst()));
             return;
         }
 

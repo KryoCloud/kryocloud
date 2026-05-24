@@ -4,8 +4,8 @@ import eu.kryocloud.node.console.CommandRegistry;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
 import eu.kryocloud.node.console.ConsoleContext;
+import eu.kryocloud.node.console.tui.ConsoleTheme;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -34,7 +34,7 @@ public final class HelpCommand implements ConsoleCommand {
 
     @Override
     public String description() {
-        return "Displays all available commands and descriptions";
+        return "Shows KryoCloud command help";
     }
 
     @Override
@@ -44,20 +44,52 @@ public final class HelpCommand implements ConsoleCommand {
 
     @Override
     public void execute(ConsoleContext context, List<String> arguments) {
+        context.header("KryoCloud command tree");
+        context.print(context.muted("Commands are object-first: ") + context.code("group Lobby start") + context.muted(" or ") + context.code("service Lobby-1 stop"));
+        context.print("");
+
+        printSection(context, "Groups", List.of(
+                line("group setup", "create a group with the setup wizard"),
+                line("group list", "show all groups"),
+                line("group <name> info", "show group details"),
+                line("group <name> start [count]", "start missing or explicit service slots"),
+                line("group <name> stop", "stop all services of a group"),
+                line("group <name> restart", "stop and start minimum services")
+        ));
+
+        printSection(context, "Services", List.of(
+                line("service list", "show known services"),
+                line("service <name> info", "show process metrics and state"),
+                line("service <name> stop", "gracefully stop and delete temp workspace"),
+                line("service <name> kill", "force stop a service"),
+                line("service <name> logs [lines]", "request recent service logs"),
+                line("service <name> cmd <command>", "write a Minecraft command")
+        ));
+
+        printSection(context, "Cluster", List.of(
+                line("wrapper list", "show wrappers"),
+                line("stats", "show current usage"),
+                line("stats live [seconds]", "animated usage sampling"),
+                line("version install <software> [version]", "install a Minecraft server version"),
+                line("service cleanup [wrapper] [--dry-run]", "remove orphaned tmp workspaces")
+        ));
+
         Map<ConsoleCategory, List<ConsoleCommand>> commandsByCategory = commandRegistry.commands().stream().collect(Collectors.groupingBy(ConsoleCommand::category));
+        context.print("");
+        context.print(ConsoleTheme.muted("Registered roots: ") + commandsByCategory.values().stream().flatMap(List::stream).map(ConsoleCommand::name).distinct().sorted().map(context::code).collect(Collectors.joining(ConsoleTheme.muted(", "))));
+    }
 
-        for (ConsoleCategory category : ConsoleCategory.values()) {
-            List<ConsoleCommand> commands = commandsByCategory.get(category);
+    private void printSection(ConsoleContext context, String title, List<String> lines) {
+        context.print("  " + ConsoleTheme.accent(title));
 
-            if (commands == null || commands.isEmpty()) {
-                continue;
-            }
-
-            context.header(category.displayName());
-
-            for (ConsoleCommand command : commands.stream().sorted(Comparator.comparing(ConsoleCommand::name)).toList()) {
-                context.bullet(context.code(command.usage()) + context.muted("  —  ") + command.description());
-            }
+        for (String line : lines) {
+            context.print(line);
         }
+
+        context.print("");
+    }
+
+    private String line(String command, String description) {
+        return "   " + ConsoleTheme.bullet() + " " + ConsoleTheme.code(command) + ConsoleTheme.muted("  —  ") + ConsoleTheme.frost(description);
     }
 }

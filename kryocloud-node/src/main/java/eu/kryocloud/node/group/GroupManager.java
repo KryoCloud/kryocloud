@@ -39,7 +39,6 @@ public final class GroupManager implements IGroupManager {
 
         configType = ConfigType.fromFileName("group" + launchConfig.getFileExtension());
         loadGroups();
-        createDefaultGroupIfMissing();
     }
 
     @Override
@@ -180,21 +179,6 @@ public final class GroupManager implements IGroupManager {
         } catch (Exception exception) {
             throw new RuntimeException("Failed to load group config " + path, exception);
         }
-    }
-
-    private void createDefaultGroupIfMissing() {
-        if (existsGroup("Lobby")) {
-            return;
-        }
-
-        GroupConfig config = new GroupConfig(groupsDirectory.resolve("Lobby" + configType.getEnding()));
-        config.save();
-
-        IGroup group = config.toGroup();
-
-        groupsById.put(group.uniqueId(), group);
-        groupIdByName.put(normalize(group.name()), group.uniqueId());
-        configsByName.put(normalize(group.name()), config);
     }
 
     private boolean isGroupConfig(Path path) {

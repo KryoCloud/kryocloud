@@ -8,12 +8,8 @@ import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
 import eu.kryocloud.node.console.ConsoleContext;
-import eu.kryocloud.node.console.tui.Box;
-import eu.kryocloud.node.console.tui.Column;
 import eu.kryocloud.node.console.tui.ConsoleAnimation;
 import eu.kryocloud.node.console.tui.ConsoleTheme;
-import eu.kryocloud.node.console.tui.Glyph;
-import eu.kryocloud.node.console.tui.Table;
 import eu.kryocloud.node.console.tui.Tone;
 import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
@@ -29,7 +25,7 @@ public final class ServicesCommand implements ConsoleCommand {
 
     @Override
     public String name() {
-        return "services";
+        return "service";
     }
 
     @Override
@@ -39,17 +35,17 @@ public final class ServicesCommand implements ConsoleCommand {
 
     @Override
     public Collection<String> aliases() {
-        return List.of("service", "instances", "instance", "servers");
+        return List.of("services", "instance", "instances", "server", "servers");
     }
 
     @Override
     public String description() {
-        return "Lists, inspects and controls Minecraft services";
+        return "Controls Minecraft services";
     }
 
     @Override
     public String usage() {
-        return "services [list|running|info <serviceId>|stop <serviceId> [reason]|kill <serviceId>|logs <serviceId> [lines]|command <serviceId> <command...>|cleanup [all|wrapperId] [--dry-run]]";
+        return "service <name> <info|stop|kill|logs|cmd> | service list | service cleanup";
     }
 
     @Override
@@ -59,49 +55,57 @@ public final class ServicesCommand implements ConsoleCommand {
             return;
         }
 
-        String action = arguments.getFirst();
+        String first = arguments.getFirst();
 
-        if ("list".equalsIgnoreCase(action)) {
+        if ("list".equalsIgnoreCase(first)) {
             list(context);
             return;
         }
 
-        if ("running".equalsIgnoreCase(action)) {
+        if ("running".equalsIgnoreCase(first)) {
             running(context);
             return;
         }
 
-        if ("info".equalsIgnoreCase(action)) {
-            info(context, arguments);
-            return;
-        }
-
-        if ("stop".equalsIgnoreCase(action)) {
-            stop(context, arguments, false);
-            return;
-        }
-
-        if ("kill".equalsIgnoreCase(action)) {
-            stop(context, arguments, true);
-            return;
-        }
-
-        if ("logs".equalsIgnoreCase(action)) {
-            logs(context, arguments);
-            return;
-        }
-
-        if ("command".equalsIgnoreCase(action)) {
-            command(context, arguments);
-            return;
-        }
-
-        if ("cleanup".equalsIgnoreCase(action)) {
+        if ("cleanup".equalsIgnoreCase(first)) {
             cleanup(context, arguments);
             return;
         }
 
-        throw new IllegalArgumentException("Usage: " + usage());
+        serviceAction(context, arguments);
+    }
+
+    private void serviceAction(ConsoleContext context, List<String> arguments) {
+        String serviceId = arguments.getFirst();
+        String action = arguments.size() >= 2 ? arguments.get(1) : "info";
+
+        if ("info".equalsIgnoreCase(action)) {
+            info(context, serviceId);
+            return;
+        }
+
+        if ("stop".equalsIgnoreCase(action)) {
+            stop(context, serviceId, joined(arguments, 2, "Console stop requested"), false);
+            return;
+        }
+
+        if ("kill".equalsIgnoreCase(action)) {
+            stop(context, serviceId, "Force stop requested from console", true);
+            return;
+        }
+
+        if ("logs".equalsIgnoreCase(action) || "log".equalsIgnoreCase(action)) {
+            int lines = arguments.size() >= 3 ? positiveInt(arguments.get(2), "lines") : 80;
+            logs(context, serviceId, lines);
+            return;
+        }
+
+        if ("cmd".equalsIgnoreCase(action) || "command".equalsIgnoreCase(action) || "write".equalsIgnoreCase(action)) {
+            command(context, serviceId, joined(arguments, 2, ""));
+            return;
+        }
+
+        throw new IllegalArgumentException("Usage: service " + serviceId + " <info|stop|kill|logs|cmd>");
     }
 
     private void list(ConsoleContext context) {
@@ -114,7 +118,6 @@ public final class ServicesCommand implements ConsoleCommand {
 
         context.header("Minecraft services");
         renderServiceTable(context, services);
-        context.print("");
     }
 
     private void running(ConsoleContext context) {
@@ -127,83 +130,61 @@ public final class ServicesCommand implements ConsoleCommand {
 
         context.header("Running Minecraft services");
         renderServiceTable(context, services);
-        context.print("");
     }
 
     private void renderServiceTable(ConsoleContext context, List<NodeServiceSnapshot> services) {
-        Table table = Table.builder().column(Column.left("Service").minWidth(14)).column(Column.left("Group").minWidth(10)).column(Column.left("Type").minWidth(7)).column(Column.left("State").minWidth(9)).column(Column.left("Wrapper").minWidth(12)).column(Column.left("Address").minWidth(18));
-
         for (NodeServiceSnapshot service : services) {
-            table.row(Tone.PRIMARY.paint(service.serviceId()), Tone.CRYSTAL.paint(service.groupName()), Tone.INFO.paint(service.serviceType().toString()), ConsoleTheme.state(service.state()), Tone.MUTED.paint(service.wrapperId()), Tone.CRYSTAL.paint(service.host() + ":" + service.port()));
+            String memory = service.processMemoryMb() > 0 ? service.processMemoryMb() + "MB" : "collecting";
+            String cpu = service.cpuLoadPermille() > 0 ? String.format("%.1f%%", service.cpuLoadPermille() / 10.0D) : "0.0%";
+            context.print(" " + ConsoleTheme.bullet() + " " + context.accent(service.serviceId()) + context.muted("  •  ") + ConsoleTheme.state(service.state()) + context.muted("  •  ") + service.groupName() + context.muted("  •  ") + memory + context.muted(" / ") + cpu);
         }
-
-        table.render(context::print);
     }
 
-    private void info(ConsoleContext context, List<String> arguments) {
-        if (arguments.size() < 2) {
-            throw new IllegalArgumentException("Usage: services info <serviceId>");
-        }
-
-        String serviceId = arguments.get(1);
+    private void info(ConsoleContext context, String serviceId) {
         NodeServiceSnapshot service = service(context, serviceId);
 
-        context.print("");
-        Box.titled("Service " + service.serviceId()).minWidth(58).blank().line(label("Group   ") + " " + Tone.CRYSTAL.paint(service.groupName())).line(label("Type    ") + " " + Tone.INFO.paint(service.serviceType().toString())).line(label("State   ") + " " + ConsoleTheme.state(service.state())).line(label("RAM     ") + " " + Tone.CRYSTAL.paint(service.processMemoryMb() + "MB")).line(label("CPU     ") + " " + ConsoleTheme.progressBarWithPercent(service.cpuLoadRatio(), 12)).line(label("Uptime  ") + " " + Tone.MUTED.paint(formatDuration(service.uptimeMillis()))).line(label("Wrapper ") + " " + Tone.MUTED.paint(service.wrapperId())).line(label("Address ") + " " + Tone.CRYSTAL.paint(service.host() + ":" + service.port())).line(label("Message ") + " " + Tone.FROST.paint(service.message())).line(label("Updated ") + " " + Tone.MUTED.paint(String.valueOf(service.timestamp()))).blank().render(context::print);
-        context.print("");
+        context.header("Service " + service.serviceId());
+        context.row("Group", service.groupName());
+        context.row("Type", service.serviceType().name());
+        context.row("State", ConsoleTheme.state(service.state()));
+        context.row("Wrapper", service.wrapperId());
+        context.row("Address", service.host() + ":" + service.port());
+        context.row("Memory", service.processMemoryMb() > 0 ? service.processMemoryMb() + "MB" : "collecting");
+        context.row("CPU", String.format("%.1f%%", service.cpuLoadPermille() / 10.0D));
+        context.row("Uptime", formatDuration(service.uptimeMillis()));
+        context.row("Message", service.message());
     }
 
-    private String label(String value) {
-        return Tone.SECONDARY.paint(value);
-    }
-
-    private void stop(ConsoleContext context, List<String> arguments, boolean force) {
-        if (arguments.size() < 2) {
-            throw new IllegalArgumentException(force ? "Usage: services kill <serviceId>" : "Usage: services stop <serviceId> [reason]");
-        }
-
-        NodeServiceSnapshot service = service(context, arguments.get(1));
+    private void stop(ConsoleContext context, String serviceId, String reason, boolean force) {
+        NodeServiceSnapshot service = service(context, serviceId);
         KryoConnection connection = wrapperConnection(context, service);
-        String reason = force ? "Force stop requested from console" : joined(arguments, 2, "Console stop requested");
         UUID requestId = UUID.randomUUID();
 
+        animation.spin(context, (force ? "shattering " : "freezing ") + service.serviceId(), Duration.ofMillis(500));
         connection.send(new ServiceStopRequestPacket(requestId, service.serviceId(), force, reason));
-        animation.spin(context, (force ? "Sending kill request to " : "Sending stop request to ") + service.serviceId(), Duration.ofMillis(450));
-        context.success((force ? "Kill" : "Stop") + " request sent to " + service.serviceId() + " on " + service.wrapperId() + ".");
+        animation.success(context, (force ? "Kill" : "Stop") + " request sent to " + service.serviceId());
     }
 
-    private void logs(ConsoleContext context, List<String> arguments) {
-        if (arguments.size() < 2) {
-            throw new IllegalArgumentException("Usage: services logs <serviceId> [lines]");
-        }
-
-        NodeServiceSnapshot service = service(context, arguments.get(1));
+    private void logs(ConsoleContext context, String serviceId, int lines) {
+        NodeServiceSnapshot service = service(context, serviceId);
         KryoConnection connection = wrapperConnection(context, service);
-        int lines = arguments.size() >= 3 ? positiveInt(arguments.get(2), "lines") : 80;
-        UUID requestId = UUID.randomUUID();
 
-        connection.send(new ServiceLogsRequestPacket(requestId, service.serviceId(), lines));
-        animation.spin(context, "Requesting logs from " + service.serviceId(), Duration.ofMillis(450));
-        context.success("Requested last " + lines + " log line(s) from " + service.serviceId() + ".");
+        animation.spin(context, "collecting frost logs from " + service.serviceId(), Duration.ofMillis(450));
+        connection.send(new ServiceLogsRequestPacket(UUID.randomUUID(), service.serviceId(), lines));
+        animation.success(context, "Requested last " + lines + " log line(s).");
     }
 
-    private void command(ConsoleContext context, List<String> arguments) {
-        if (arguments.size() < 3) {
-            throw new IllegalArgumentException("Usage: services command <serviceId> <command...>");
-        }
-
-        NodeServiceSnapshot service = service(context, arguments.get(1));
-        KryoConnection connection = wrapperConnection(context, service);
-        String command = joined(arguments, 2, "");
-
-        if (command.isBlank()) {
+    private void command(ConsoleContext context, String serviceId, String command) {
+        if (command == null || command.isBlank()) {
             throw new IllegalArgumentException("command must not be blank");
         }
 
-        UUID requestId = UUID.randomUUID();
-        connection.send(new ServiceCommandRequestPacket(requestId, service.serviceId(), command));
-        animation.spin(context, "Sending Minecraft command to " + service.serviceId(), Duration.ofMillis(450));
-        context.success("Command sent to " + service.serviceId() + ": " + context.code(command));
+        NodeServiceSnapshot service = service(context, serviceId);
+        KryoConnection connection = wrapperConnection(context, service);
+
+        animation.spin(context, "writing command into " + service.serviceId(), Duration.ofMillis(450));
+        connection.send(new ServiceCommandRequestPacket(UUID.randomUUID(), service.serviceId(), command));
+        animation.success(context, "Command sent: " + context.code(command));
     }
 
     private void cleanup(ConsoleContext context, List<String> arguments) {
@@ -224,8 +205,8 @@ public final class ServicesCommand implements ConsoleCommand {
                 return;
             }
 
-            animation.spin(context, (dryRun ? "Requesting cleanup preview" : "Requesting cleanup") + " on wrappers", Duration.ofMillis(600));
-            context.success((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + sent + " wrapper(s).");
+            animation.spin(context, dryRun ? "scanning orphaned temp instances" : "cleaning orphaned temp instances", Duration.ofMillis(600));
+            animation.success(context, (dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + sent + " wrapper(s).");
             return;
         }
 
@@ -233,8 +214,8 @@ public final class ServicesCommand implements ConsoleCommand {
             throw new IllegalStateException("Wrapper is not connected: " + target);
         }
 
-        animation.spin(context, (dryRun ? "Requesting cleanup preview" : "Requesting cleanup") + " on " + target, Duration.ofMillis(600));
-        context.success((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + target + ".");
+        animation.spin(context, dryRun ? "scanning " + target : "cleaning " + target, Duration.ofMillis(600));
+        animation.success(context, (dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + target + ".");
     }
 
     private boolean sendCleanup(ConsoleContext context, String wrapperId, UUID requestId, boolean dryRun) {
@@ -254,27 +235,6 @@ public final class ServicesCommand implements ConsoleCommand {
         }
 
         return "all";
-    }
-
-
-    private String formatDuration(long millis) {
-        if (millis < 1) {
-            return "unknown";
-        }
-
-        long seconds = millis / 1000L;
-        long minutes = seconds / 60L;
-        long hours = minutes / 60L;
-
-        if (hours > 0) {
-            return hours + "h " + (minutes % 60L) + "m";
-        }
-
-        if (minutes > 0) {
-            return minutes + "m " + (seconds % 60L) + "s";
-        }
-
-        return seconds + "s";
     }
 
     private NodeServiceSnapshot service(ConsoleContext context, String serviceId) {
@@ -305,5 +265,25 @@ public final class ServicesCommand implements ConsoleCommand {
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(name + " must be a valid number", exception);
         }
+    }
+
+    private String formatDuration(long millis) {
+        if (millis < 1) {
+            return Tone.MUTED.paint("collecting");
+        }
+
+        long seconds = millis / 1000L;
+        long minutes = seconds / 60L;
+        long hours = minutes / 60L;
+
+        if (hours > 0) {
+            return hours + "h " + minutes % 60L + "m";
+        }
+
+        if (minutes > 0) {
+            return minutes + "m " + seconds % 60L + "s";
+        }
+
+        return seconds + "s";
     }
 }
