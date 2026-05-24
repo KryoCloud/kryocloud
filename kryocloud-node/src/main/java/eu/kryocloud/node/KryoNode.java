@@ -83,7 +83,7 @@ public class KryoNode implements INode {
             servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry);
             servicePacketHandlers.register();
 
-            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, versionStorage);
+            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage);
 
             protocolServer = new KryoProtocolServer(launchConfig.getPort());
             protocolServer.start();
@@ -103,6 +103,8 @@ public class KryoNode implements INode {
         if (!running.getAndSet(false)) {
             return;
         }
+
+        stopMinecraftServices();
 
         if (console != null) {
             console.close();
@@ -144,6 +146,27 @@ public class KryoNode implements INode {
         }
 
         LOGGER.success("KryoCloud node stopped.");
+    }
+
+    private void stopMinecraftServices() {
+        if (serviceScheduler == null || serviceRegistry == null) {
+            return;
+        }
+
+        if (serviceRegistry.services().isEmpty()) {
+            return;
+        }
+
+        int sent = serviceScheduler.stopAll("KryoCloud node shutdown", false);
+        LOGGER.warn("Stopping " + sent + " Minecraft service(s) before node shutdown.");
+
+        if (sent < 1) {
+            return;
+        }
+
+        if (!serviceScheduler.waitForServiceDrain(Duration.ofSeconds(25))) {
+            LOGGER.warn("Not every Minecraft service confirmed shutdown in time. Closing protocol anyway.");
+        }
     }
 
     public NodeWrapperRegistry wrapperRegistry() {

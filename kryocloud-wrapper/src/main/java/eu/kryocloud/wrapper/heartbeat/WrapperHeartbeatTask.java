@@ -3,12 +3,13 @@ package eu.kryocloud.wrapper.heartbeat;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocol;
 import eu.kryocloud.network.KryoProtocolClient;
+import eu.kryocloud.network.packet.type.service.ServiceMetricsPacket;
 import eu.kryocloud.network.packet.type.wrapper.WrapperHeartbeatPacket;
 import eu.kryocloud.network.protocol.WrapperState;
 import eu.kryocloud.wrapper.instance.InstanceManager;
+import eu.kryocloud.wrapper.instance.metrics.InstanceMetrics;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -22,8 +23,9 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
     private final InstanceManager instanceManager;
     private final ScheduledExecutorService executor;
     private final AtomicLong sequence = new AtomicLong();
+    private final int maxMemoryMb;
 
-    public WrapperHeartbeatTask(String wrapperId, KryoProtocolClient protocolClient, InstanceManager instanceManager, ScheduledExecutorService executor) {
+    public WrapperHeartbeatTask(String wrapperId, KryoProtocolClient protocolClient, InstanceManager instanceManager, ScheduledExecutorService executor, int maxMemoryMb) {
         if (wrapperId == null || wrapperId.isBlank()) {
             throw new IllegalArgumentException("wrapperId must not be blank");
         }
@@ -40,14 +42,19 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
             throw new IllegalArgumentException("executor must not be null");
         }
 
+        if (maxMemoryMb < 1) {
+            throw new IllegalArgumentException("maxMemoryMb must be greater than 0");
+        }
+
         this.wrapperId = wrapperId;
         this.protocolClient = protocolClient;
         this.instanceManager = instanceManager;
         this.executor = executor;
+        this.maxMemoryMb = maxMemoryMb;
     }
 
     public void start() {
-        executor.scheduleAtFixedRate(this::sendHeartbeatSafely, KryoProtocol.HEARTBEAT_INTERVAL_MILLIS, KryoProtocol.HEARTBEAT_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
+        executor.scheduleAtFixedRate(this::sendHeartbeatSafely, 0L, KryoProtocol.HEARTBEAT_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private void sendHeartbeatSafely() {
@@ -56,27 +63,23 @@ public final class WrapperHeartbeatTask implements AutoCloseable {
                 return;
             }
 
-            protocolClient.send(new WrapperHeartbeatPacket(wrapperId, WrapperState.AVAILABLE, sequence.incrementAndGet(), usedMemoryMb(), maxMemoryMb(), instanceManager.runningInstanceCount()));
+            List<InstanceMetrics> metrics = instanceManager.metrics();
+            protocolClient.send(new WrapperHeartbeatPacket(wrapperId, WrapperState.AVAILABLE, sequence.incrementAndGet(), usedMemoryMb(metrics), maxMemoryMb, instanceManager.runningInstanceCount(), cpuLoadPermille(metrics)));
+
+            for (InstanceMetrics metric : metrics) {
+                protocolClient.send(new ServiceMetricsPacket(metric.serviceId(), wrapperId, metric.memoryMb(), metric.cpuLoadPermille(), metric.uptimeMillis()));
+            }
         } catch (Exception exception) {
             LOGGER.warn("Failed to send wrapper heartbeat: " + exception.getMessage());
         }
     }
 
-    private int usedMemoryMb() {
-        MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
-        long usedBytes = memory.getHeapMemoryUsage().getUsed();
-        return Math.toIntExact(usedBytes / 1024L / 1024L);
+    private int usedMemoryMb(List<InstanceMetrics> metrics) {
+        return Math.min(maxMemoryMb, metrics.stream().mapToInt(InstanceMetrics::memoryMb).sum());
     }
 
-    private int maxMemoryMb() {
-        MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
-        long maxBytes = memory.getHeapMemoryUsage().getMax();
-
-        if (maxBytes < 1) {
-            return 1;
-        }
-
-        return Math.toIntExact(maxBytes / 1024L / 1024L);
+    private int cpuLoadPermille(List<InstanceMetrics> metrics) {
+        return Math.min(1000, metrics.stream().mapToInt(InstanceMetrics::cpuLoadPermille).sum());
     }
 
     @Override

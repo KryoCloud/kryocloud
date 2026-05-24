@@ -4,7 +4,7 @@ import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.node.KryoNode;
 import eu.kryocloud.node.console.tui.ConsoleIntro;
-import eu.kryocloud.node.console.tui.ConsoleTheme;
+import eu.kryocloud.node.console.tui.KryoPrompt;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -24,12 +24,17 @@ public final class KryoConsole implements AutoCloseable {
 
     private final KryoNode node;
     private final CommandRegistry commandRegistry;
+    private final KryoPrompt prompt;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private volatile Thread thread;
     private volatile LineReader reader;
 
     public KryoConsole(KryoNode node, CommandRegistry commandRegistry) {
+        this(node, commandRegistry, "node");
+    }
+
+    public KryoConsole(KryoNode node, CommandRegistry commandRegistry, String nodeName) {
         if (node == null) {
             throw new IllegalArgumentException("node must not be null");
         }
@@ -40,6 +45,7 @@ public final class KryoConsole implements AutoCloseable {
 
         this.node = node;
         this.commandRegistry = commandRegistry;
+        this.prompt = new KryoPrompt(nodeName);
     }
 
     public void start() {
@@ -97,7 +103,7 @@ public final class KryoConsole implements AutoCloseable {
 
     private void readAndExecute(ConsoleContext context, LineReader activeReader) {
         try {
-            String line = activeReader.readLine(prompt());
+            String line = activeReader.readLine(prompt.render());
             execute(context, line);
         } catch (UserInterruptException exception) {
             context.warn("Use 'stop' to shutdown the node.");
@@ -124,9 +130,5 @@ public final class KryoConsole implements AutoCloseable {
         ConsoleCommand command = commandRegistry.command(commandName).orElseThrow(() -> new IllegalArgumentException("Unknown command: " + commandName));
 
         command.execute(context, arguments);
-    }
-
-    private String prompt() {
-        return ConsoleTheme.gradient("kryocloud", "#00E5FF", "#A855F7") + " " + ConsoleTheme.PINK.apply("❯") + " ";
     }
 }

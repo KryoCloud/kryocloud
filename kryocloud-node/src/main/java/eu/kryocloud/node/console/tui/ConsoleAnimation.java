@@ -7,8 +7,16 @@ import java.util.function.Supplier;
 
 public final class ConsoleAnimation {
 
-    private static final String[] SPINNER_FRAMES = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+    private static final String[] FROST_SPINNER = {
+            Glyph.SNOWFLAKE.value(),
+            Glyph.SNOWFLAKE_LIGHT.value(),
+            Glyph.CRYSTAL.value(),
+            Glyph.DIAMOND.value(),
+            Glyph.CRYSTAL.value(),
+            Glyph.SNOWFLAKE_LIGHT.value()
+    };
     private static final String CLEAR_LINE = "\r\u001B[2K";
+    private static final long FRAME_MILLIS = 90L;
 
     public void spin(ConsoleContext context, String label, Duration duration) {
         if (context == null) {
@@ -20,7 +28,7 @@ public final class ConsoleAnimation {
         }
 
         validateDuration(duration, "duration");
-        animate(context, () -> ConsoleTheme.PRIMARY.apply(nextFrame()) + " " + ConsoleTheme.value(label), duration, Duration.ofMillis(80));
+        animate(context, () -> "  " + Tone.PRIMARY.paint(nextFrame()) + "  " + Tone.FROST.paint(label), duration, Duration.ofMillis(FRAME_MILLIS));
         context.raw(CLEAR_LINE);
     }
 
@@ -35,7 +43,7 @@ public final class ConsoleAnimation {
 
         validateDuration(duration, "duration");
         validateDuration(interval, "interval");
-        animate(context, () -> ConsoleTheme.PRIMARY.apply(nextFrame()) + " " + lineSupplier.get(), duration, interval);
+        animate(context, () -> "  " + Tone.PRIMARY.paint(nextFrame()) + "  " + lineSupplier.get(), duration, interval);
         context.raw(CLEAR_LINE);
     }
 
@@ -45,7 +53,7 @@ public final class ConsoleAnimation {
         }
 
         context.raw(CLEAR_LINE);
-        context.success("✓ " + safe(message));
+        context.print("  " + Tone.SUCCESS.paint(Glyph.CHECK.value()) + "  " + Tone.FROST.paint(safe(message)));
     }
 
     public void failure(ConsoleContext context, String message) {
@@ -54,22 +62,26 @@ public final class ConsoleAnimation {
         }
 
         context.raw(CLEAR_LINE);
-        context.error("✕ " + safe(message));
+        context.print("  " + Tone.DANGER.paint(Glyph.CROSS.value()) + "  " + Tone.DANGER.paint(safe(message)));
     }
 
     private void animate(ConsoleContext context, Supplier<String> lineSupplier, Duration duration, Duration interval) {
         long deadline = System.currentTimeMillis() + duration.toMillis();
 
         while (System.currentTimeMillis() <= deadline) {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+
             context.raw(CLEAR_LINE + lineSupplier.get());
             sleep(interval);
         }
     }
 
     private String nextFrame() {
-        long frame = System.currentTimeMillis() / 80L;
-        int index = (int) (frame % SPINNER_FRAMES.length);
-        return SPINNER_FRAMES[index];
+        long frame = System.currentTimeMillis() / FRAME_MILLIS;
+        int index = (int) Math.floorMod(frame, FROST_SPINNER.length);
+        return FROST_SPINNER[index];
     }
 
     private void validateDuration(Duration duration, String name) {

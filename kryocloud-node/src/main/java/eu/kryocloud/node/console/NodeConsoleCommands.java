@@ -1,6 +1,13 @@
 package eu.kryocloud.node.console;
 
-import eu.kryocloud.node.console.command.*;
+import eu.kryocloud.node.console.command.GroupsCommand;
+import eu.kryocloud.node.console.command.HelpCommand;
+import eu.kryocloud.node.console.command.ServicesCommand;
+import eu.kryocloud.node.console.command.StartServiceCommand;
+import eu.kryocloud.node.console.command.StatsCommand;
+import eu.kryocloud.node.console.command.StopCommand;
+import eu.kryocloud.node.console.command.VersionCommand;
+import eu.kryocloud.node.console.command.WrappersCommand;
 
 public final class NodeConsoleCommands {
 

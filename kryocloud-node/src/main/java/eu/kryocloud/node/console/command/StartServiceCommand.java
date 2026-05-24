@@ -5,14 +5,18 @@ import eu.kryocloud.network.protocol.CloudServiceType;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
 import eu.kryocloud.node.console.ConsoleContext;
+import eu.kryocloud.node.console.tui.ConsoleAnimation;
 import eu.kryocloud.node.service.schedule.ServiceStartPlan;
 import eu.kryocloud.node.service.schedule.ServiceStartResult;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
 public final class StartServiceCommand implements ConsoleCommand {
+
+    private final ConsoleAnimation animation = new ConsoleAnimation();
 
     @Override
     public String name() {
@@ -61,12 +65,12 @@ public final class StartServiceCommand implements ConsoleCommand {
             count = parsePositiveInt(arguments.get(1), "count");
         }
 
+        animation.spin(context, "crystallizing " + count + " service slot(s) for " + groupName, Duration.ofMillis(700));
         List<ServiceStartResult> results = context.node().serviceScheduler().startGroup(groupName, count);
-
-        context.success("Started " + results.size() + " Minecraft service request(s) from group " + groupName + ".");
+        animation.success(context, "Start request accepted for group " + groupName);
 
         for (ServiceStartResult result : results) {
-            context.print("  " + result.serviceId() + " -> " + result.wrapperId() + " (" + result.requestId() + ")");
+            context.print("  " + context.accent(result.serviceId()) + context.muted(" -> ") + result.wrapperId() + context.muted(" / ") + result.requestId());
         }
     }
 
@@ -92,11 +96,11 @@ public final class StartServiceCommand implements ConsoleCommand {
         int memoryMb = parsePositiveInt(arguments.get(5), "memoryMb");
         int port = parsePort(arguments.get(6));
         boolean staticService = arguments.size() >= 8 && Boolean.parseBoolean(arguments.get(7));
-        ServiceStartResult result = context.node().serviceScheduler().start(new ServiceStartPlan(serviceId, groupName, templateName, serviceType, port, memoryMb, staticService));
 
-        context.success("Manual Minecraft service start request sent.");
+        animation.spin(context, "preparing manual Minecraft service " + serviceId, Duration.ofMillis(650));
+        ServiceStartResult result = context.node().serviceScheduler().start(new ServiceStartPlan(serviceId, groupName, templateName, serviceType, port, memoryMb, staticService));
+        animation.success(context, "Manual start request sent for " + result.serviceId());
         context.print("  Request: " + result.requestId());
-        context.print("  Service: " + result.serviceId());
         context.print("  Wrapper: " + result.wrapperId());
     }
 

@@ -15,15 +15,16 @@ public final class WrapperHeartbeatPacket extends Packet {
     private int usedMemoryMb;
     private int maxMemoryMb;
     private int runningServices;
+    private int cpuLoadPermille;
 
     public WrapperHeartbeatPacket() {
     }
 
-    public WrapperHeartbeatPacket(String wrapperId, WrapperState state, long sequence, int usedMemoryMb, int maxMemoryMb, int runningServices) {
-        this(wrapperId, state, System.currentTimeMillis(), sequence, usedMemoryMb, maxMemoryMb, runningServices);
+    public WrapperHeartbeatPacket(String wrapperId, WrapperState state, long sequence, int usedMemoryMb, int maxMemoryMb, int runningServices, int cpuLoadPermille) {
+        this(wrapperId, state, System.currentTimeMillis(), sequence, usedMemoryMb, maxMemoryMb, runningServices, cpuLoadPermille);
     }
 
-    public WrapperHeartbeatPacket(String wrapperId, WrapperState state, long timestamp, long sequence, int usedMemoryMb, int maxMemoryMb, int runningServices) {
+    public WrapperHeartbeatPacket(String wrapperId, WrapperState state, long timestamp, long sequence, int usedMemoryMb, int maxMemoryMb, int runningServices, int cpuLoadPermille) {
         this.wrapperId = PacketValidation.nonBlankString(wrapperId, "wrapperId");
         this.state = PacketValidation.value(state, "state");
         this.timestamp = PacketValidation.positiveLong(timestamp, "timestamp");
@@ -31,6 +32,7 @@ public final class WrapperHeartbeatPacket extends Packet {
         this.usedMemoryMb = PacketValidation.nonNegativeInt(usedMemoryMb, "usedMemoryMb");
         this.maxMemoryMb = PacketValidation.positiveInt(maxMemoryMb, "maxMemoryMb");
         this.runningServices = PacketValidation.nonNegativeInt(runningServices, "runningServices");
+        this.cpuLoadPermille = PacketValidation.nonNegativeInt(cpuLoadPermille, "cpuLoadPermille");
     }
 
     @Override
@@ -50,6 +52,7 @@ public final class WrapperHeartbeatPacket extends Packet {
         buffer.writeInt(usedMemoryMb);
         buffer.writeInt(maxMemoryMb);
         buffer.writeInt(runningServices);
+        buffer.writeInt(cpuLoadPermille);
     }
 
     @Override
@@ -63,6 +66,7 @@ public final class WrapperHeartbeatPacket extends Packet {
         usedMemoryMb = buffer.readInt();
         maxMemoryMb = buffer.readInt();
         runningServices = buffer.readInt();
+        cpuLoadPermille = buffer.readInt();
     }
 
     public String wrapperId() {
@@ -93,6 +97,10 @@ public final class WrapperHeartbeatPacket extends Packet {
         return runningServices;
     }
 
+    public int cpuLoadPermille() {
+        return cpuLoadPermille;
+    }
+
     private void validateWritable() {
         PacketValidation.nonBlankString(wrapperId, "wrapperId");
         PacketValidation.value(state, "state");
@@ -101,5 +109,6 @@ public final class WrapperHeartbeatPacket extends Packet {
         PacketValidation.nonNegativeInt(usedMemoryMb, "usedMemoryMb");
         PacketValidation.positiveInt(maxMemoryMb, "maxMemoryMb");
         PacketValidation.nonNegativeInt(runningServices, "runningServices");
+        PacketValidation.nonNegativeInt(cpuLoadPermille, "cpuLoadPermille");
     }
 }

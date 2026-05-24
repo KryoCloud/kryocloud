@@ -2,43 +2,15 @@ package eu.kryocloud.node.console.stats;
 
 import java.util.List;
 
-public record ClusterStatsSnapshot(long timestamp, int wrappersOnline, int wrappersTimedOut, int wrapperMemoryUsedMb, int wrapperMemoryMaxMb, int knownServices, int runningServices, int startingServices, int failedServices, List<GroupStatsSnapshot> groups) {
+public record ClusterStatsSnapshot(long timestamp, int wrappersOnline, int wrappersTimedOut, int processMemoryMb, int wrapperMemoryMaxMb, int cpuLoadPermille, int knownServices, int runningServices, int startingServices, int failedServices, List<GroupStatsSnapshot> groups) {
 
     public ClusterStatsSnapshot {
         if (timestamp < 1) {
             throw new IllegalArgumentException("timestamp must be greater than 0");
         }
 
-        if (wrappersOnline < 0) {
-            throw new IllegalArgumentException("wrappersOnline must not be negative");
-        }
-
-        if (wrappersTimedOut < 0) {
-            throw new IllegalArgumentException("wrappersTimedOut must not be negative");
-        }
-
-        if (wrapperMemoryUsedMb < 0) {
-            throw new IllegalArgumentException("wrapperMemoryUsedMb must not be negative");
-        }
-
-        if (wrapperMemoryMaxMb < 0) {
-            throw new IllegalArgumentException("wrapperMemoryMaxMb must not be negative");
-        }
-
-        if (knownServices < 0) {
-            throw new IllegalArgumentException("knownServices must not be negative");
-        }
-
-        if (runningServices < 0) {
-            throw new IllegalArgumentException("runningServices must not be negative");
-        }
-
-        if (startingServices < 0) {
-            throw new IllegalArgumentException("startingServices must not be negative");
-        }
-
-        if (failedServices < 0) {
-            throw new IllegalArgumentException("failedServices must not be negative");
+        if (wrappersOnline < 0 || wrappersTimedOut < 0 || processMemoryMb < 0 || wrapperMemoryMaxMb < 0 || cpuLoadPermille < 0 || knownServices < 0 || runningServices < 0 || startingServices < 0 || failedServices < 0) {
+            throw new IllegalArgumentException("stats values must not be negative");
         }
 
         if (groups == null) {
@@ -53,7 +25,11 @@ public record ClusterStatsSnapshot(long timestamp, int wrappersOnline, int wrapp
             return 0.0D;
         }
 
-        return Math.min(1.0D, (double) wrapperMemoryUsedMb / (double) wrapperMemoryMaxMb);
+        return Math.min(1.0D, (double) processMemoryMb / (double) wrapperMemoryMaxMb);
+    }
+
+    public double cpuLoadRatio() {
+        return Math.max(0.0D, Math.min(1.0D, cpuLoadPermille / 1000.0D));
     }
 
     public int groupCount() {

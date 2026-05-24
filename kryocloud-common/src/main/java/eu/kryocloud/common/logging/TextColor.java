@@ -4,6 +4,9 @@ public final class TextColor {
 
     public static final TextColor RESET = new TextColor(-1, -1, -1, "\u001B[0m");
     public static final TextColor BOLD = new TextColor(-1, -1, -1, "\u001B[1m");
+    public static final TextColor DIM = new TextColor(-1, -1, -1, "\u001B[2m");
+    public static final TextColor ITALIC = new TextColor(-1, -1, -1, "\u001B[3m");
+    public static final TextColor UNDERLINE = new TextColor(-1, -1, -1, "\u001B[4m");
 
     public static final TextColor GRAY = hex("#8B949E");
     public static final TextColor RED = hex("#FF5C5C");
@@ -56,7 +59,11 @@ public final class TextColor {
     }
 
     public String apply(String text) {
-        return escape + safe(text) + RESET.escape;
+        if (text == null) {
+            return "";
+        }
+
+        return escape + text + RESET.escape;
     }
 
     public String code() {
@@ -79,13 +86,5 @@ public final class TextColor {
         if (value < 0 || value > 255) {
             throw new IllegalArgumentException(name + " must be between 0 and 255");
         }
-    }
-
-    private String safe(String text) {
-        if (text == null) {
-            return "null";
-        }
-
-        return text;
     }
 }

@@ -9,6 +9,20 @@ public final class KryoLogger {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
+    private static final TextColor SNOWFLAKE_COLOR = TextColor.hex("#7DD3FC");
+    private static final TextColor TIME_COLOR = TextColor.hex("#7C8EA3");
+    private static final TextColor NAME_COLOR = TextColor.hex("#38BDF8");
+    private static final TextColor MESSAGE_COLOR = TextColor.hex("#E0F2FE");
+    private static final TextColor STACK_COLOR = TextColor.hex("#7C8EA3");
+
+    private static final TextColor INFO_COLOR = TextColor.hex("#7DD3FC");
+    private static final TextColor SUCCESS_COLOR = TextColor.hex("#34D399");
+    private static final TextColor WARN_COLOR = TextColor.hex("#FDE68A");
+    private static final TextColor ERROR_COLOR = TextColor.hex("#FCA5A5");
+    private static final TextColor DEBUG_COLOR = TextColor.hex("#7C8EA3");
+
+    private static final String SNOWFLAKE = "❄";
+
     private static volatile boolean colorsEnabled = true;
     private static volatile boolean debugEnabled = false;
     private static volatile boolean stackTracesEnabled = true;
@@ -40,23 +54,23 @@ public final class KryoLogger {
     }
 
     public void info(String message) {
-        log("INFO", TextColor.hex("#5EEAD4"), message, null);
+        log("INFO ", INFO_COLOR, message, null);
     }
 
     public void success(String message) {
-        log("OK", TextColor.hex("#3DDC97"), message, null);
+        log("OK   ", SUCCESS_COLOR, message, null);
     }
 
     public void warn(String message) {
-        log("WARN", TextColor.hex("#FFD166"), message, null);
+        log("WARN ", WARN_COLOR, message, null);
     }
 
     public void error(String message) {
-        log("ERROR", TextColor.hex("#FF5C5C"), message, null);
+        log("ERROR", ERROR_COLOR, message, null);
     }
 
     public void error(String message, Throwable throwable) {
-        log("ERROR", TextColor.hex("#FF5C5C"), message, throwable);
+        log("ERROR", ERROR_COLOR, message, throwable);
     }
 
     public void debug(String message) {
@@ -64,13 +78,12 @@ public final class KryoLogger {
             return;
         }
 
-        log("DEBUG", TextColor.hex("#8B949E"), message, null);
+        log("DEBUG", DEBUG_COLOR, message, null);
     }
 
-    private void log(String level, TextColor color, String message, Throwable throwable) {
+    private void log(String level, TextColor levelColor, String message, Throwable throwable) {
         String time = LocalTime.now().format(TIME_FORMAT);
-        String prefix = "[" + time + " " + level + " " + name + "] ";
-        String line = color(prefix, color) + safe(message);
+        String line = paint(" " + SNOWFLAKE + " ", SNOWFLAKE_COLOR) + paint(time, TIME_COLOR) + "  " + paintBold(level, levelColor) + "  " + paint(padRight(name, 12), NAME_COLOR) + "  " + paint(safe(message), MESSAGE_COLOR);
 
         ConsoleOutput.println(line);
 
@@ -82,15 +95,31 @@ public final class KryoLogger {
             return;
         }
 
-        ConsoleOutput.println(color(stackTrace(throwable), TextColor.hex("#8B949E")));
+        ConsoleOutput.println(paint(stackTrace(throwable), STACK_COLOR));
     }
 
-    private String color(String value, TextColor color) {
+    private String paint(String value, TextColor color) {
         if (!colorsEnabled) {
             return value;
         }
 
         return color.apply(value);
+    }
+
+    private String paintBold(String value, TextColor color) {
+        if (!colorsEnabled) {
+            return value;
+        }
+
+        return TextColor.BOLD.code() + color.apply(value);
+    }
+
+    private String padRight(String value, int width) {
+        if (value.length() >= width) {
+            return value;
+        }
+
+        return value + " ".repeat(width - value.length());
     }
 
     private String safe(String message) {

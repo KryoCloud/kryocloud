@@ -6,8 +6,14 @@ import eu.kryocloud.node.console.ConsoleContext;
 import eu.kryocloud.node.console.stats.ClusterStatsCollector;
 import eu.kryocloud.node.console.stats.ClusterStatsSnapshot;
 import eu.kryocloud.node.console.stats.GroupStatsSnapshot;
+import eu.kryocloud.node.console.tui.Box;
+import eu.kryocloud.node.console.tui.Column;
 import eu.kryocloud.node.console.tui.ConsoleAnimation;
 import eu.kryocloud.node.console.tui.ConsoleTheme;
+import eu.kryocloud.node.console.tui.Glyph;
+import eu.kryocloud.node.console.tui.ProgressBar;
+import eu.kryocloud.node.console.tui.Table;
+import eu.kryocloud.node.console.tui.Tone;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -72,11 +78,26 @@ public final class StatsCommand implements ConsoleCommand {
     private void snapshot(ConsoleContext context) {
         ClusterStatsSnapshot snapshot = collector(context).snapshot();
 
-        context.header("Minecraft cloud stats");
-        context.row("Wrappers", snapshot.wrappersOnline() + " online, " + snapshot.wrappersTimedOut() + " timed out");
-        context.row("Services", snapshot.runningServices() + " running, " + snapshot.startingServices() + " starting, " + snapshot.failedServices() + " failed, " + snapshot.knownServices() + " known");
-        context.row("Memory", snapshot.wrapperMemoryUsedMb() + "MB / " + snapshot.wrapperMemoryMaxMb() + "MB " + ConsoleTheme.progressBar(snapshot.wrapperMemoryRatio(), 18) + " " + ConsoleTheme.percent(snapshot.wrapperMemoryRatio()));
-        context.row("Groups", String.valueOf(snapshot.groupCount()));
+        context.print("");
+        Box.titled("Minecraft cloud stats").minWidth(58).blank().line(label("Wrappers") + " " + Tone.INFO.paint(snapshot.wrappersOnline() + " online") + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.WARNING.paint(snapshot.wrappersTimedOut() + " timed out")).line(label("Services") + " " + Tone.SUCCESS.paint(snapshot.runningServices() + " running") + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.INFO.paint(snapshot.startingServices() + " starting") + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.DANGER.paint(snapshot.failedServices() + " failed")).line(label("Process RAM") + " " + memoryRow(snapshot)).line(label("CPU        ") + " " + ProgressBar.renderWithPercent(snapshot.cpuLoadRatio(), 18)).line(label("Groups ") + " " + Tone.CRYSTAL.paint(String.valueOf(snapshot.groupCount()))).blank().render(context::print);
+        context.print("");
+    }
+
+    private String memoryRow(ClusterStatsSnapshot snapshot) {
+        String numbers = memoryValue(snapshot.processMemoryMb(), snapshot.runningServices()) + Tone.MUTED.paint(" / ") + Tone.CRYSTAL.paint(snapshot.wrapperMemoryMaxMb() + "MB");
+        return numbers + "  " + ProgressBar.renderWithPercent(snapshot.wrapperMemoryRatio(), 18);
+    }
+
+    private String label(String value) {
+        return Tone.SECONDARY.paint(value);
+    }
+
+    private String memoryValue(int memoryMb, int runningServices) {
+        if (runningServices > 0 && memoryMb < 16) {
+            return Tone.MUTED.paint("collecting");
+        }
+
+        return Tone.CRYSTAL.paint(memoryMb + "MB");
     }
 
     private void groups(ConsoleContext context) {
@@ -89,9 +110,14 @@ public final class StatsCommand implements ConsoleCommand {
 
         context.header("Minecraft group usage");
 
+        Table table = Table.builder().column(Column.left("Group").minWidth(12)).column(Column.left("Type").minWidth(7)).column(Column.left("Software").minWidth(14)).column(Column.right("Services").minWidth(8)).column(Column.right("RAM").minWidth(8)).column(Column.left("CPU").minWidth(18));
+
         for (GroupStatsSnapshot group : snapshot.groups()) {
-            printGroupLine(context, group);
+            table.row(Tone.PRIMARY.paint(group.groupName()), Tone.INFO.paint(group.serviceType().name()), Tone.CRYSTAL.paint(group.software() + " " + group.softwareVersion()), Tone.CRYSTAL.paint(group.runningServices() + "/" + group.maxCount()), memoryValue(group.processMemoryMb(), group.runningServices()), ProgressBar.renderWithPercent(group.cpuLoadRatio(), 10));
         }
+
+        table.render(context::print);
+        context.print("");
     }
 
     private void group(ConsoleContext context, List<String> arguments) {
@@ -101,13 +127,9 @@ public final class StatsCommand implements ConsoleCommand {
 
         GroupStatsSnapshot group = collector(context).groupSnapshot(arguments.get(1));
 
-        context.header("Group " + group.groupName());
-        context.row("Type", group.serviceType().name());
-        context.row("Software", group.software() + " " + group.softwareVersion());
-        context.row("Services", group.runningServices() + "/" + group.maxCount() + " running " + ConsoleTheme.progressBar(group.serviceUsageRatio(), 18) + " " + ConsoleTheme.percent(group.serviceUsageRatio()));
-        context.row("Configured memory", group.configuredMemoryMb() + "MB / " + group.maxMemoryCapacityMb() + "MB " + ConsoleTheme.progressBar(group.memoryUsageRatio(), 18) + " " + ConsoleTheme.percent(group.memoryUsageRatio()));
-        context.row("Static", String.valueOf(group.staticServices()));
-        context.row("Known", group.knownServices() + " known, " + group.failedServices() + " failed");
+        context.print("");
+        Box.titled("Group " + group.groupName()).minWidth(58).blank().line(label("Type     ") + " " + Tone.INFO.paint(group.serviceType().name())).line(label("Software ") + " " + Tone.CRYSTAL.paint(group.software() + " " + group.softwareVersion())).line(label("Services ") + " " + Tone.CRYSTAL.paint(group.runningServices() + "/" + group.maxCount()) + "  " + ProgressBar.renderWithPercent(group.serviceUsageRatio(), 18)).line(label("Process  ") + " " + memoryValue(group.processMemoryMb(), group.runningServices()) + Tone.MUTED.paint(" / ") + Tone.CRYSTAL.paint(group.maxMemoryCapacityMb() + "MB") + "  " + ProgressBar.renderWithPercent(group.memoryUsageRatio(), 18)).line(label("CPU      ") + " " + ProgressBar.renderWithPercent(group.cpuLoadRatio(), 18)).line(label("Reserved ") + " " + Tone.MUTED.paint(group.reservedMemoryMb() + "MB configured")).line(label("Static   ") + " " + Tone.CRYSTAL.paint(String.valueOf(group.staticServices()))).line(label("Known    ") + " " + Tone.CRYSTAL.paint(group.knownServices() + " known") + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.DANGER.paint(group.failedServices() + " failed")).blank().render(context::print);
+        context.print("");
     }
 
     private void live(ConsoleContext context, List<String> arguments) {
@@ -121,11 +143,7 @@ public final class StatsCommand implements ConsoleCommand {
     }
 
     private String liveLine(ClusterStatsSnapshot snapshot) {
-        return ConsoleTheme.value("wrappers ") + ConsoleTheme.info(String.valueOf(snapshot.wrappersOnline())) + ConsoleTheme.muted("  •  ") + ConsoleTheme.value("services ") + ConsoleTheme.success(String.valueOf(snapshot.runningServices())) + ConsoleTheme.muted("/") + ConsoleTheme.value(String.valueOf(snapshot.knownServices())) + ConsoleTheme.muted("  •  ") + ConsoleTheme.value("memory ") + ConsoleTheme.progressBar(snapshot.wrapperMemoryRatio(), 14) + " " + ConsoleTheme.percent(snapshot.wrapperMemoryRatio());
-    }
-
-    private void printGroupLine(ConsoleContext context, GroupStatsSnapshot group) {
-        context.print(" " + ConsoleTheme.bullet() + " " + context.accent(group.groupName()) + context.muted("  •  ") + ConsoleTheme.value(group.serviceType().name()) + context.muted("  •  ") + ConsoleTheme.value(group.software() + " " + group.softwareVersion()) + context.muted("  •  ") + group.runningServices() + "/" + group.maxCount() + " " + ConsoleTheme.progressBar(group.serviceUsageRatio(), 12) + " " + ConsoleTheme.percent(group.serviceUsageRatio()));
+        return Tone.MUTED.paint("wrappers ") + Tone.INFO.paint(String.valueOf(snapshot.wrappersOnline())) + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.MUTED.paint("services ") + Tone.SUCCESS.paint(String.valueOf(snapshot.runningServices())) + Tone.MUTED.paint("/") + Tone.CRYSTAL.paint(String.valueOf(snapshot.knownServices())) + Tone.MUTED.paint("  " + Glyph.SEPARATOR + "  ") + Tone.MUTED.paint("ram ") + ProgressBar.renderWithPercent(snapshot.wrapperMemoryRatio(), 14);
     }
 
     private ClusterStatsCollector collector(ConsoleContext context) {

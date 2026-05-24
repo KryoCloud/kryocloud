@@ -77,7 +77,7 @@ public final class KryoWrapper implements IWrapper {
                 return thread;
             });
 
-            heartbeatTask = new WrapperHeartbeatTask(wrapperId, protocolClient, instanceManager, heartbeatExecutor);
+            heartbeatTask = new WrapperHeartbeatTask(wrapperId, protocolClient, instanceManager, heartbeatExecutor, launchConfig.getMaxMemoryMb());
             heartbeatTask.start();
 
             LOGGER.success("KryoWrapper connected as " + wrapperId + " via " + nodeConnection.id());

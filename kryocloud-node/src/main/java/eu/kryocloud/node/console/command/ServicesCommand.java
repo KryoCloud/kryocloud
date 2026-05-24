@@ -8,8 +8,13 @@ import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
 import eu.kryocloud.node.console.ConsoleContext;
+import eu.kryocloud.node.console.tui.Box;
+import eu.kryocloud.node.console.tui.Column;
 import eu.kryocloud.node.console.tui.ConsoleAnimation;
 import eu.kryocloud.node.console.tui.ConsoleTheme;
+import eu.kryocloud.node.console.tui.Glyph;
+import eu.kryocloud.node.console.tui.Table;
+import eu.kryocloud.node.console.tui.Tone;
 import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
 
@@ -108,10 +113,8 @@ public final class ServicesCommand implements ConsoleCommand {
         }
 
         context.header("Minecraft services");
-
-        for (NodeServiceSnapshot service : services) {
-            context.print(" • " + context.accent(service.serviceId()) + " | " + service.groupName() + " | " + service.serviceType() + " | " + ConsoleTheme.state(service.state()) + " | " + service.wrapperId() + " | " + service.host() + ":" + service.port());
-        }
+        renderServiceTable(context, services);
+        context.print("");
     }
 
     private void running(ConsoleContext context) {
@@ -123,10 +126,18 @@ public final class ServicesCommand implements ConsoleCommand {
         }
 
         context.header("Running Minecraft services");
+        renderServiceTable(context, services);
+        context.print("");
+    }
+
+    private void renderServiceTable(ConsoleContext context, List<NodeServiceSnapshot> services) {
+        Table table = Table.builder().column(Column.left("Service").minWidth(14)).column(Column.left("Group").minWidth(10)).column(Column.left("Type").minWidth(7)).column(Column.left("State").minWidth(9)).column(Column.left("Wrapper").minWidth(12)).column(Column.left("Address").minWidth(18));
 
         for (NodeServiceSnapshot service : services) {
-            context.print(" • " + context.accent(service.serviceId()) + " | " + service.groupName() + " | " + service.wrapperId() + " | " + service.host() + ":" + service.port());
+            table.row(Tone.PRIMARY.paint(service.serviceId()), Tone.CRYSTAL.paint(service.groupName()), Tone.INFO.paint(service.serviceType().toString()), ConsoleTheme.state(service.state()), Tone.MUTED.paint(service.wrapperId()), Tone.CRYSTAL.paint(service.host() + ":" + service.port()));
         }
+
+        table.render(context::print);
     }
 
     private void info(ConsoleContext context, List<String> arguments) {
@@ -137,14 +148,13 @@ public final class ServicesCommand implements ConsoleCommand {
         String serviceId = arguments.get(1);
         NodeServiceSnapshot service = service(context, serviceId);
 
-        context.header("Service " + service.serviceId());
-        context.print("  Group: " + service.groupName());
-        context.print("  Type: " + service.serviceType());
-        context.print("  State: " + ConsoleTheme.state(service.state()));
-        context.print("  Wrapper: " + service.wrapperId());
-        context.print("  Address: " + service.host() + ":" + service.port());
-        context.print("  Message: " + service.message());
-        context.print("  Updated: " + service.timestamp());
+        context.print("");
+        Box.titled("Service " + service.serviceId()).minWidth(58).blank().line(label("Group   ") + " " + Tone.CRYSTAL.paint(service.groupName())).line(label("Type    ") + " " + Tone.INFO.paint(service.serviceType().toString())).line(label("State   ") + " " + ConsoleTheme.state(service.state())).line(label("RAM     ") + " " + Tone.CRYSTAL.paint(service.processMemoryMb() + "MB")).line(label("CPU     ") + " " + ConsoleTheme.progressBarWithPercent(service.cpuLoadRatio(), 12)).line(label("Uptime  ") + " " + Tone.MUTED.paint(formatDuration(service.uptimeMillis()))).line(label("Wrapper ") + " " + Tone.MUTED.paint(service.wrapperId())).line(label("Address ") + " " + Tone.CRYSTAL.paint(service.host() + ":" + service.port())).line(label("Message ") + " " + Tone.FROST.paint(service.message())).line(label("Updated ") + " " + Tone.MUTED.paint(String.valueOf(service.timestamp()))).blank().render(context::print);
+        context.print("");
+    }
+
+    private String label(String value) {
+        return Tone.SECONDARY.paint(value);
     }
 
     private void stop(ConsoleContext context, List<String> arguments, boolean force) {
@@ -244,6 +254,27 @@ public final class ServicesCommand implements ConsoleCommand {
         }
 
         return "all";
+    }
+
+
+    private String formatDuration(long millis) {
+        if (millis < 1) {
+            return "unknown";
+        }
+
+        long seconds = millis / 1000L;
+        long minutes = seconds / 60L;
+        long hours = minutes / 60L;
+
+        if (hours > 0) {
+            return hours + "h " + (minutes % 60L) + "m";
+        }
+
+        if (minutes > 0) {
+            return minutes + "m " + (seconds % 60L) + "s";
+        }
+
+        return seconds + "s";
     }
 
     private NodeServiceSnapshot service(ConsoleContext context, String serviceId) {

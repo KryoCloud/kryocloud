@@ -3,6 +3,8 @@ package eu.kryocloud.node.console;
 import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.node.KryoNode;
 import eu.kryocloud.node.console.tui.ConsoleTheme;
+import eu.kryocloud.node.console.tui.Glyph;
+import eu.kryocloud.node.console.tui.Tone;
 import org.jline.reader.LineReader;
 import org.jline.terminal.Terminal;
 
@@ -38,29 +40,33 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
     }
 
     public void success(String message) {
-        print(ConsoleTheme.success(message));
+        print("  " + Tone.SUCCESS.paint(Glyph.CHECK.value()) + "  " + Tone.FROST.paint(message));
     }
 
     public void warn(String message) {
-        print(ConsoleTheme.warning(message));
+        print("  " + Tone.WARNING.paint("!") + "  " + Tone.WARNING.paint(message));
     }
 
     public void error(String message) {
-        print(ConsoleTheme.danger(message));
+        print("  " + Tone.DANGER.paint(Glyph.CROSS.value()) + "  " + Tone.DANGER.paint(message));
     }
 
-    public void header(String message) {
+    public void info(String message) {
+        print("  " + Tone.INFO.paint(Glyph.DOT.value()) + "  " + Tone.FROST.paint(message));
+    }
+
+    public void header(String title) {
         print("");
-        print(ConsoleTheme.title(message));
-        print(ConsoleTheme.divider(Math.max(24, message.length() + 8)));
+        print(" " + Tone.PRIMARY.paint(Glyph.SNOWFLAKE.value()) + " " + Tone.SHIMMER.paintBold(title));
+        print(" " + ConsoleTheme.frostDivider(Math.max(36, title.length() + 14)));
     }
 
     public void row(String label, String value) {
-        print("  " + ConsoleTheme.label(label + ": ") + ConsoleTheme.value(value));
+        print("   " + Tone.SECONDARY.paint(label + ":") + " " + Tone.CRYSTAL.paint(value));
     }
 
     public void bullet(String value) {
-        print(" " + ConsoleTheme.bullet() + " " + value);
+        print("   " + ConsoleTheme.bullet() + " " + value);
     }
 
     public String ask(String question, String fallback) {
@@ -70,7 +76,8 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
             suffix = " " + muted("[" + fallback + "]");
         }
 
-        String answer = reader.readLine(ConsoleTheme.PRIMARY.apply(question) + suffix + " ");
+        String prompt = "  " + Tone.PRIMARY.paint(Glyph.ARROW.value()) + "  " + Tone.PRIMARY.paint(question) + suffix + " ";
+        String answer = reader.readLine(prompt);
 
         if (answer == null || answer.isBlank()) {
             return fallback;
@@ -99,7 +106,7 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
     }
 
     public String code(String value) {
-        return ConsoleTheme.command(value);
+        return ConsoleTheme.code(value);
     }
 
     public String muted(String value) {
@@ -107,19 +114,28 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
     }
 
     public String accent(String value) {
-        return ConsoleTheme.PRIMARY.apply(value);
+        return Tone.PRIMARY.paint(value);
     }
 
+
     public String good(String value) {
-        return ConsoleTheme.success(value);
+        return Tone.SUCCESS.paint(value);
     }
 
     public String bad(String value) {
-        return ConsoleTheme.danger(value);
+        return Tone.DANGER.paint(value);
     }
 
     public String yellow(String value) {
-        return ConsoleTheme.warning(value);
+        return Tone.WARNING.paint(value);
+    }
+
+    public String value(String value) {
+        return Tone.CRYSTAL.paint(value);
+    }
+
+    public String label(String value) {
+        return Tone.SECONDARY.paint(value);
     }
 
     public void stopConsole() {

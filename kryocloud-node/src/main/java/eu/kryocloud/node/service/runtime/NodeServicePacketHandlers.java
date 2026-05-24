@@ -7,6 +7,7 @@ import eu.kryocloud.network.packet.bus.PacketSubscription;
 import eu.kryocloud.network.packet.type.service.ServiceCleanupResponsePacket;
 import eu.kryocloud.network.packet.type.service.ServiceCommandResponsePacket;
 import eu.kryocloud.network.packet.type.service.ServiceLogsResponsePacket;
+import eu.kryocloud.network.packet.type.service.ServiceMetricsPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStatePacket;
 import eu.kryocloud.network.protocol.PeerType;
 
@@ -36,6 +37,7 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
         subscriptions.add(KryoPacketBus.listen(ServiceStatePacket.class, this::handleServiceState));
         subscriptions.add(KryoPacketBus.listen(ServiceCommandResponsePacket.class, this::handleCommandResponse));
         subscriptions.add(KryoPacketBus.listen(ServiceLogsResponsePacket.class, this::handleLogsResponse));
+        subscriptions.add(KryoPacketBus.listen(ServiceMetricsPacket.class, this::handleMetrics));
         subscriptions.add(KryoPacketBus.listen(ServiceCleanupResponsePacket.class, this::handleCleanupResponse));
     }
 
@@ -93,6 +95,16 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
         context.printState(packet.logs().isBlank() ? TextColor.hex("#8B949E").apply("No log lines available.") : packet.logs());
     }
 
+
+
+    private void handleMetrics(PacketContext context, ServiceMetricsPacket packet) {
+        if (!validWrapper(context)) {
+            context.connection().close();
+            return;
+        }
+
+        serviceRegistry.updateMetrics(packet);
+    }
 
     private void handleCleanupResponse(PacketContext context, ServiceCleanupResponsePacket packet) {
         if (!validWrapper(context)) {

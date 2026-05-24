@@ -5,25 +5,28 @@ import eu.kryocloud.api.group.IGroupManager;
 import eu.kryocloud.api.service.ServiceType;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
+import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
 import eu.kryocloud.network.protocol.CloudServiceType;
+import eu.kryocloud.node.service.runtime.NodeServiceRegistry;
+import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.version.NodeVersionStorage;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public final class NodeServiceScheduler {
 
     private final NodeWrapperRegistry wrapperRegistry;
     private final IGroupManager groupManager;
+    private final NodeServiceRegistry serviceRegistry;
     private final NodeVersionStorage versionStorage;
-    private final ConcurrentMap<String, Integer> nextServiceNumberByGroup = new ConcurrentHashMap<>();
 
-    public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeVersionStorage versionStorage) {
+    public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeServiceRegistry serviceRegistry, NodeVersionStorage versionStorage) {
         if (wrapperRegistry == null) {
             throw new IllegalArgumentException("wrapperRegistry must not be null");
         }
@@ -32,12 +35,17 @@ public final class NodeServiceScheduler {
             throw new IllegalArgumentException("groupManager must not be null");
         }
 
+        if (serviceRegistry == null) {
+            throw new IllegalArgumentException("serviceRegistry must not be null");
+        }
+
         if (versionStorage == null) {
             throw new IllegalArgumentException("versionStorage must not be null");
         }
 
         this.wrapperRegistry = wrapperRegistry;
         this.groupManager = groupManager;
+        this.serviceRegistry = serviceRegistry;
         this.versionStorage = versionStorage;
     }
 
@@ -80,7 +88,54 @@ public final class NodeServiceScheduler {
 
         ensureGroupSoftware(group);
 
-        return java.util.stream.IntStream.range(0, count).mapToObj(index -> start(planFromGroup(group))).toList();
+        List<ServiceStartPlan> plans = plansFromGroup(group, count);
+        List<ServiceStartResult> results = new ArrayList<>();
+
+        for (ServiceStartPlan plan : plans) {
+            results.add(start(plan));
+        }
+
+        return List.copyOf(results);
+    }
+
+    public int stopAll(String reason, boolean force) {
+        String safeReason = reason == null || reason.isBlank() ? "KryoCloud shutdown" : reason;
+        int sent = 0;
+
+        for (NodeServiceSnapshot service : serviceRegistry.services()) {
+            Optional<KryoConnection> connection = wrapperRegistry.connection(service.wrapperId());
+
+            if (connection.isEmpty()) {
+                continue;
+            }
+
+            connection.get().send(new ServiceStopRequestPacket(UUID.randomUUID(), service.serviceId(), force, safeReason));
+            sent++;
+        }
+
+        return sent;
+    }
+
+    public boolean waitForServiceDrain(Duration timeout) {
+        if (timeout == null) {
+            throw new IllegalArgumentException("timeout must not be null");
+        }
+
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be positive");
+        }
+
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+
+        while (System.currentTimeMillis() <= deadline) {
+            if (serviceRegistry.runningServices().isEmpty()) {
+                return true;
+            }
+
+            sleep(250L);
+        }
+
+        return serviceRegistry.runningServices().isEmpty();
     }
 
     public Optional<WrapperSnapshot> selectWrapper(ServiceStartPlan plan) {
@@ -109,8 +164,35 @@ public final class NodeServiceScheduler {
         versionStorage.materializeTemplate(group.software(), group.softwareVersion(), group.templateName());
     }
 
-    private ServiceStartPlan planFromGroup(IGroup group) {
-        int serviceNumber = nextServiceNumberByGroup.compute(normalize(group.name()), (name, current) -> current == null ? 1 : current + 1);
+    private List<ServiceStartPlan> plansFromGroup(IGroup group, int count) {
+        List<ServiceStartPlan> plans = new ArrayList<>();
+
+        for (int index = 0; index < count; index++) {
+            int serviceNumber = nextFreeServiceNumber(group, plans);
+            plans.add(planFromGroup(group, serviceNumber));
+        }
+
+        return List.copyOf(plans);
+    }
+
+    private int nextFreeServiceNumber(IGroup group, List<ServiceStartPlan> pendingPlans) {
+        int maxSlots = Math.max(group.maxCount(), group.serviceCount());
+        int slot = 1;
+
+        while (slot <= maxSlots) {
+            int candidate = slot;
+
+            if (!serviceRegistry.activeGroupSlot(group.name(), candidate) && pendingPlans.stream().noneMatch(plan -> plan.serviceId().equalsIgnoreCase(group.name() + "-" + candidate))) {
+                return candidate;
+            }
+
+            slot++;
+        }
+
+        throw new IllegalStateException("No free service slot available for group " + group.name() + ". Running services must stop before a new slot can be created.");
+    }
+
+    private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber) {
         int port = group.basePort() + serviceNumber - 1;
         return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices());
     }
@@ -133,7 +215,11 @@ public final class NodeServiceScheduler {
         }
     }
 
-    private String normalize(String value) {
-        return value.toLowerCase();
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

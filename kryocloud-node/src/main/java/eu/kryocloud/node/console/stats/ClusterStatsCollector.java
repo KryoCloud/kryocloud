@@ -25,13 +25,14 @@ public final class ClusterStatsCollector {
         List<WrapperSnapshot> wrappers = node.wrapperRegistry().wrappers();
         List<NodeServiceSnapshot> services = node.serviceRegistry().services();
         List<GroupStatsSnapshot> groups = node.groupManager().groups().stream().map(group -> groupSnapshot(group, services)).sorted(Comparator.comparing(GroupStatsSnapshot::groupName)).toList();
-        int memoryUsed = wrappers.stream().mapToInt(WrapperSnapshot::usedMemoryMb).sum();
+        int processMemory = wrappers.stream().mapToInt(WrapperSnapshot::usedMemoryMb).sum();
         int memoryMax = wrappers.stream().mapToInt(WrapperSnapshot::maxMemoryMb).sum();
+        int cpuLoad = Math.min(1000, wrappers.stream().mapToInt(WrapperSnapshot::cpuLoadPermille).sum());
         int running = (int) services.stream().filter(service -> service.state() == CloudServiceState.RUNNING).count();
         int starting = (int) services.stream().filter(service -> service.state() == CloudServiceState.PREPARING || service.state() == CloudServiceState.STARTING).count();
         int failed = (int) services.stream().filter(service -> service.state() == CloudServiceState.FAILED).count();
 
-        return new ClusterStatsSnapshot(System.currentTimeMillis(), wrappers.size(), node.wrapperRegistry().timedOutWrappers().size(), memoryUsed, memoryMax, services.size(), running, starting, failed, groups);
+        return new ClusterStatsSnapshot(System.currentTimeMillis(), wrappers.size(), node.wrapperRegistry().timedOutWrappers().size(), processMemory, memoryMax, cpuLoad, services.size(), running, starting, failed, groups);
     }
 
     public GroupStatsSnapshot groupSnapshot(String groupName) {
@@ -52,9 +53,11 @@ public final class ClusterStatsCollector {
         List<NodeServiceSnapshot> services = allServices.stream().filter(service -> service.groupName().equalsIgnoreCase(group.name())).toList();
         int running = (int) services.stream().filter(service -> service.state() == CloudServiceState.RUNNING).count();
         int failed = (int) services.stream().filter(service -> service.state() == CloudServiceState.FAILED).count();
-        int configuredMemory = running * group.maxMemory();
+        int reservedMemory = running * group.maxMemory();
+        int processMemory = services.stream().mapToInt(NodeServiceSnapshot::processMemoryMb).sum();
+        int cpuLoad = Math.min(1000, services.stream().mapToInt(NodeServiceSnapshot::cpuLoadPermille).sum());
         int capacityMemory = group.maxCount() * group.maxMemory();
 
-        return new GroupStatsSnapshot(group.name(), group.serviceType(), group.software(), group.softwareVersion(), services.size(), running, failed, group.serviceCount(), group.minCount(), group.maxCount(), configuredMemory, capacityMemory, group.staticServices());
+        return new GroupStatsSnapshot(group.name(), group.serviceType(), group.software(), group.softwareVersion(), services.size(), running, failed, group.serviceCount(), group.minCount(), group.maxCount(), reservedMemory, processMemory, capacityMemory, cpuLoad, group.staticServices());
     }
 }

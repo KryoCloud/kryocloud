@@ -26,7 +26,7 @@ public final class NodeWrapperRegistry {
 
         long now = System.currentTimeMillis();
         String remoteAddress = remoteAddress(connection.remoteAddress());
-        WrapperSnapshot snapshot = new WrapperSnapshot(packet.wrapperId(), connection.id(), packet.hostname(), packet.address(), packet.osName(), packet.availableProcessors(), packet.maxMemoryMb(), 0, 0, WrapperState.AVAILABLE, now, now, remoteAddress);
+        WrapperSnapshot snapshot = new WrapperSnapshot(packet.wrapperId(), connection.id(), packet.hostname(), packet.address(), packet.osName(), packet.availableProcessors(), packet.maxMemoryMb(), 0, 0, 0, WrapperState.AVAILABLE, now, now, remoteAddress);
 
         wrappersById.put(packet.wrapperId(), snapshot);
         connectionsByWrapperId.put(packet.wrapperId(), connection);
@@ -49,7 +49,7 @@ public final class NodeWrapperRegistry {
                 throw new IllegalStateException("Wrapper " + wrapperId + " heartbeat came from unexpected connection " + connection.id());
             }
 
-            return currentSnapshot.withHeartbeat(packet.state(), packet.timestamp(), packet.usedMemoryMb(), packet.maxMemoryMb(), packet.runningServices());
+            return currentSnapshot.withHeartbeat(packet.state(), packet.timestamp(), packet.usedMemoryMb(), packet.maxMemoryMb(), packet.runningServices(), packet.cpuLoadPermille());
         });
 
         if (updatedSnapshot == null) {
@@ -242,6 +242,10 @@ public final class NodeWrapperRegistry {
 
         if (packet.runningServices() < 0) {
             throw new IllegalArgumentException("packet.runningServices must not be negative");
+        }
+
+        if (packet.cpuLoadPermille() < 0) {
+            throw new IllegalArgumentException("packet.cpuLoadPermille must not be negative");
         }
     }
 
