@@ -20,6 +20,8 @@ public interface IGroup {
 
     String softwareVersion();
 
+    String bindAddress();
+
     ServiceType serviceType();
 
     Collection<IService> services();

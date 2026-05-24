@@ -13,7 +13,7 @@ public final class InstanceReadinessProbe {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("ReadinessProbe");
 
-    private static final List<Pattern> SERVER_READY_PATTERNS = List.of(Pattern.compile("Done \\(.*\\)! For help, type", Pattern.CASE_INSENSITIVE), Pattern.compile("For help, type", Pattern.CASE_INSENSITIVE), Pattern.compile("Timings Reset", Pattern.CASE_INSENSITIVE));
+    private static final List<Pattern> SERVER_READY_PATTERNS = List.of(Pattern.compile("Done \\(.*\\)! For help, type", Pattern.CASE_INSENSITIVE), Pattern.compile("For help, type", Pattern.CASE_INSENSITIVE), Pattern.compile("Timings Reset", Pattern.CASE_INSENSITIVE), Pattern.compile("Server marked as running", Pattern.CASE_INSENSITIVE));
     private static final List<Pattern> PROXY_READY_PATTERNS = List.of(Pattern.compile("Listening on", Pattern.CASE_INSENSITIVE), Pattern.compile("Listening for connections", Pattern.CASE_INSENSITIVE), Pattern.compile("Started proxy", Pattern.CASE_INSENSITIVE), Pattern.compile("Done", Pattern.CASE_INSENSITIVE));
     private static final List<Pattern> FAILURE_PATTERNS = List.of(Pattern.compile("Unrecognized VM option", Pattern.CASE_INSENSITIVE), Pattern.compile("Could not create the Java Virtual Machine", Pattern.CASE_INSENSITIVE), Pattern.compile("UnsupportedClassVersionError", Pattern.CASE_INSENSITIVE), Pattern.compile("You need to agree to the EULA", Pattern.CASE_INSENSITIVE), Pattern.compile("Failed to bind to port", Pattern.CASE_INSENSITIVE), Pattern.compile("Address already in use", Pattern.CASE_INSENSITIVE), Pattern.compile("OutOfMemoryError", Pattern.CASE_INSENSITIVE), Pattern.compile("Exception in thread", Pattern.CASE_INSENSITIVE));
 
@@ -57,23 +57,27 @@ public final class InstanceReadinessProbe {
             Optional<String> failure = find(FAILURE_PATTERNS, logs);
 
             if (failure.isPresent()) {
-                return InstanceReadinessResult.failed("Minecraft startup failed: " + failure.get(), tail(logs, 350));
+                return InstanceReadinessResult.failed("Minecraft startup failed: " + failure.get(), tail(logs, 700));
             }
 
             Optional<String> ready = find(readyPatterns(serviceType), logs);
 
             if (ready.isPresent()) {
-                return InstanceReadinessResult.ready("Minecraft instance reached readiness: " + ready.get(), tail(logs, 350));
+                return InstanceReadinessResult.ready("Minecraft instance reached readiness", tail(logs, 700));
             }
 
             if (!online(instance)) {
-                return InstanceReadinessResult.failed("Minecraft process stopped before readiness", tail(logs, 350));
+                return InstanceReadinessResult.failed("Minecraft process stopped before readiness", tail(logs, 700));
             }
 
             sleep(pollInterval);
         }
 
-        return InstanceReadinessResult.failed("Minecraft instance did not become ready within " + timeout.toSeconds() + "s", tail(logs, 350));
+        if (online(instance)) {
+            return InstanceReadinessResult.ready("Minecraft process is alive; readiness log was not detected yet", tail(logs, 700));
+        }
+
+        return InstanceReadinessResult.failed("Minecraft instance did not become ready within " + timeout.toSeconds() + "s", tail(logs, 700));
     }
 
     private List<Pattern> readyPatterns(CloudServiceType serviceType) {

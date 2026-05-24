@@ -32,6 +32,9 @@ public final class GroupConfig extends Config {
     @Comment("Minecraft software version from manifest/version storage")
     private String softwareVersion = "latest";
 
+    @Comment("IP address this group should bind Minecraft services to")
+    private String bindAddress = "127.0.0.1";
+
     @Comment("Install and materialize software automatically before group start")
     private boolean installOnStart = true;
 
@@ -67,7 +70,7 @@ public final class GroupConfig extends Config {
     }
 
     public CloudGroup toGroup() {
-        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, basePort, staticServices, installOnStart);
+        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), requireNonBlank(bindAddress, "bindAddress"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, basePort, staticServices, installOnStart);
     }
 
     public String getSoftware() {
@@ -76,6 +79,10 @@ public final class GroupConfig extends Config {
 
     public String getSoftwareVersion() {
         return softwareVersion;
+    }
+
+    public String getBindAddress() {
+        return bindAddress;
     }
 
     public boolean isInstallOnStart() {
@@ -124,6 +131,10 @@ public final class GroupConfig extends Config {
 
     public void setSoftwareVersion(String softwareVersion) {
         this.softwareVersion = softwareVersion;
+    }
+
+    public void setBindAddress(String bindAddress) {
+        this.bindAddress = bindAddress;
     }
 
     public void setInstallOnStart(boolean installOnStart) {

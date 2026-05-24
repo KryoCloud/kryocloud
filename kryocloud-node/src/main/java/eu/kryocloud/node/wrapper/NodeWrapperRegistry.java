@@ -40,24 +40,25 @@ public final class NodeWrapperRegistry {
         validateConnection(connection);
         validateHeartbeatPacket(packet);
 
-        WrapperSnapshot updatedSnapshot = wrappersById.compute(packet.wrapperId(), (wrapperId, currentSnapshot) -> {
-            if (currentSnapshot == null) {
-                return null;
-            }
+        WrapperSnapshot currentSnapshot = wrappersById.get(packet.wrapperId());
 
-            if (!currentSnapshot.connectionId().equals(connection.id())) {
-                throw new IllegalStateException("Wrapper " + wrapperId + " heartbeat came from unexpected connection " + connection.id());
-            }
-
-            return currentSnapshot.withHeartbeat(packet.state(), packet.timestamp(), packet.usedMemoryMb(), packet.maxMemoryMb(), packet.runningServices(), packet.cpuLoadPermille());
-        });
-
-        if (updatedSnapshot == null) {
+        if (currentSnapshot == null) {
             return Optional.empty();
         }
 
+        if (!currentSnapshot.connectionId().equals(connection.id())) {
+            throw new IllegalStateException("Wrapper " + packet.wrapperId() + " heartbeat came from unexpected connection " + connection.id());
+        }
+
+        WrapperSnapshot updatedSnapshot = currentSnapshot.withHeartbeat(packet.state(), packet.timestamp(), packet.usedMemoryMb(), packet.maxMemoryMb(), packet.runningServices(), packet.cpuLoadPermille());
+        wrappersById.put(packet.wrapperId(), updatedSnapshot);
         connection.markHeartbeat();
-        return Optional.of(updatedSnapshot);
+
+        if (currentSnapshot.state() != packet.state()) {
+            return Optional.of(updatedSnapshot);
+        }
+
+        return Optional.empty();
     }
 
     public Optional<WrapperSnapshot> unregisterConnection(KryoConnection connection) {

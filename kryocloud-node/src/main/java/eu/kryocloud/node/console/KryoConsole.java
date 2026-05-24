@@ -1,5 +1,6 @@
 package eu.kryocloud.node.console;
 
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.node.KryoNode;
@@ -10,10 +11,12 @@ import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.DefaultParser;
-import org.jline.reader.impl.completer.StringsCompleter;
+import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -84,7 +87,8 @@ public final class KryoConsole implements AutoCloseable {
 
     private void runConsole() {
         try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
-            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).completer(new StringsCompleter(commandRegistry.commandNames())).build();
+            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).history(new DefaultHistory()).completer(new KryoCommandCompleter(node, commandRegistry)).build();
+            prepareHistory(activeReader);
             ConsoleContext context = new ConsoleContext(node, terminal, activeReader, running);
 
             reader = activeReader;
@@ -101,16 +105,43 @@ public final class KryoConsole implements AutoCloseable {
         }
     }
 
+    private void prepareHistory(LineReader activeReader) {
+        try {
+            Path historyFile = KryoDirectoryLayout.CONFIG.resolve("console.history");
+            Files.createDirectories(historyFile.getParent());
+            activeReader.setVariable(LineReader.HISTORY_FILE, historyFile);
+            activeReader.option(LineReader.Option.HISTORY_IGNORE_DUPS, true);
+            activeReader.option(LineReader.Option.HISTORY_REDUCE_BLANKS, true);
+        } catch (Exception exception) {
+            LOGGER.warn("Failed to prepare console history: " + exception.getMessage());
+        }
+    }
+
     private void readAndExecute(ConsoleContext context, LineReader activeReader) {
         try {
             String line = activeReader.readLine(prompt.render());
             execute(context, line);
         } catch (UserInterruptException exception) {
-            context.warn("Use 'stop' to shutdown the node.");
+            shutdownFromInterrupt(context);
         } catch (EndOfFileException exception) {
             context.stopConsole();
         } catch (Exception exception) {
             context.error(exception.getMessage());
+        }
+    }
+
+    private void shutdownFromInterrupt(ConsoleContext context) {
+        if (!running.get()) {
+            return;
+        }
+
+        try {
+            ConsoleOutput.clearTransient();
+            commandRegistry.command("shutdown").orElseThrow(() -> new IllegalStateException("shutdown command is not registered")).execute(context, List.of());
+        } catch (Exception exception) {
+            context.error(exception.getMessage());
+            context.stopConsole();
+            node.shutdown();
         }
     }
 

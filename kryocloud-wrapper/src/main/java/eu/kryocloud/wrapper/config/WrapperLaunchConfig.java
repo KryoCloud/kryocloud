@@ -7,6 +7,9 @@ import java.nio.file.Path;
 
 public final class WrapperLaunchConfig extends Config {
 
+    @Comment("Internal KryoCloud name used for wrapper screen sessions")
+    private String cloudName = "kryocloud";
+
     @Comment("Unique wrapper id used by the node to track this wrapper")
     private String wrapperId = "wrapper-1";
 
@@ -25,8 +28,8 @@ public final class WrapperLaunchConfig extends Config {
     @Comment("Maximum memory in MB this wrapper should advertise")
     private int maxMemoryMb = 4096;
 
-    @Comment("Directory containing Java runtimes, for example runtimes/java-21/bin/java")
-    private String javaRuntimesDirectory = "runtimes";
+    @Comment("Directory containing managed Java runtimes. Relative paths are resolved from the KryoCloud data directory.")
+    private String javaRuntimesDirectory = ".jdk";
 
     @Comment("Seconds the wrapper waits for Minecraft readiness log output before marking a service as RUNNING")
     private int startupProbeSeconds = 90;
@@ -36,6 +39,14 @@ public final class WrapperLaunchConfig extends Config {
 
     public WrapperLaunchConfig(Path path) {
         super(path);
+    }
+
+    public String getCloudName() {
+        return cloudName;
+    }
+
+    public void setCloudName(String cloudName) {
+        this.cloudName = cloudName;
     }
 
     public String getWrapperId() {

@@ -46,7 +46,16 @@ public final class HelpCommand implements ConsoleCommand {
     public void execute(ConsoleContext context, List<String> arguments) {
         context.header("KryoCloud command tree");
         context.print(context.muted("Commands are object-first: ") + context.code("group Lobby start") + context.muted(" or ") + context.code("service Lobby-1 stop"));
+        context.print(context.muted("Use TAB for completion, arrow-up for history and CTRL+C for ") + context.code("shutdown") + context.muted("."));
         context.print("");
+
+        printSection(context, "Cloud", List.of(
+                line("cloud info", "show cloud home, config, templates, storage and JDK paths"),
+                line("cloud home", "show current runtime directory and source"),
+                line("cloud home set <path>", "change the .kryocloud-home pointer for next restart"),
+                line("cloud home reset", "delete the pointer and run storage setup on next restart"),
+                line("shutdown", "gracefully shut down KryoCloud; CTRL+C runs this too")
+        ));
 
         printSection(context, "Groups", List.of(
                 line("group setup", "create a group with the setup wizard"),
@@ -54,7 +63,9 @@ public final class HelpCommand implements ConsoleCommand {
                 line("group <name> info", "show group details"),
                 line("group <name> start [count]", "start missing or explicit service slots"),
                 line("group <name> stop", "stop all services of a group"),
-                line("group <name> restart", "stop and start minimum services")
+                line("group <name> restart", "stop and start minimum services"),
+                line("ip list", "show server/proxy bind addresses"),
+                line("ip add <server|proxy> <address>", "register a new bind address")
         ));
 
         printSection(context, "Services", List.of(

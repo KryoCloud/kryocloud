@@ -290,6 +290,7 @@ public final class InstanceWorkspace {
             }
         }
 
+        properties.setProperty("server-ip", packet.bindAddress());
         properties.setProperty("server-port", String.valueOf(packet.port()));
         properties.setProperty("query.port", String.valueOf(packet.port()));
         properties.setProperty("motd", "KryoCloud " + packet.serviceId());

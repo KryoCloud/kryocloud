@@ -4,6 +4,7 @@ target/
 !**/src/test/**/target/
 .kotlin
 test/
+kryocloud-runtime/
 
 ### IntelliJ IDEA ###
 .idea/

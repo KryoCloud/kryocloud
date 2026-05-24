@@ -14,19 +14,31 @@ import eu.kryocloud.network.protocol.PeerType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 public final class NodeServicePacketHandlers implements AutoCloseable {
 
     private final NodeServiceRegistry serviceRegistry;
+    private final Consumer<NodeServiceSnapshot> stateAction;
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
     public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry) {
+        this(serviceRegistry, snapshot -> {
+        });
+    }
+
+    public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry, Consumer<NodeServiceSnapshot> stateAction) {
         if (serviceRegistry == null) {
             throw new IllegalArgumentException("serviceRegistry must not be null");
         }
 
+        if (stateAction == null) {
+            throw new IllegalArgumentException("stateAction must not be null");
+        }
+
         this.serviceRegistry = serviceRegistry;
+        this.stateAction = stateAction;
     }
 
     public void register() {
@@ -61,7 +73,9 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
         }
 
         NodeServiceSnapshot snapshot = serviceRegistry.update(packet);
-        context.printState(TextColor.hex("#5EEAD4").apply("Service " + snapshot.serviceId()) + " is now " + stateColor(snapshot.state().name()) + " on " + snapshot.wrapperId());
+        String message = snapshot.message() == null || snapshot.message().isBlank() ? "" : TextColor.hex("#8B949E").apply(" — " + snapshot.message());
+        context.printState(TextColor.hex("#5EEAD4").apply("Service " + snapshot.serviceId()) + " is now " + stateColor(snapshot.state().name()) + " on " + snapshot.wrapperId() + message);
+        stateAction.accept(snapshot);
     }
 
     private void handleCommandResponse(PacketContext context, ServiceCommandResponsePacket packet) {

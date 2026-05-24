@@ -4,6 +4,7 @@ import eu.kryocloud.api.config.IConfigProvider;
 import eu.kryocloud.api.template.ITemplate;
 import eu.kryocloud.api.template.ITemplateManager;
 import eu.kryocloud.common.config.type.ConfigType;
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.node.config.LaunchConfig;
 
 import java.nio.file.Files;
@@ -17,7 +18,7 @@ import java.util.stream.Stream;
 public final class TemplateManager implements ITemplateManager {
 
     private final ConcurrentMap<String, ITemplate> templates = new ConcurrentHashMap<>();
-    private final Path templatesDirectory = Path.of("templates");
+    private final Path templatesDirectory = KryoDirectoryLayout.TEMPLATES;
     private final ConfigType configType;
 
     public TemplateManager(IConfigProvider configProvider) {
@@ -93,7 +94,7 @@ public final class TemplateManager implements ITemplateManager {
         try {
             TemplateConfig config = new TemplateConfig(templatesDirectory.resolve(template.name() + configType.getEnding()));
             config.setName(template.name());
-            config.setPath(template.path().toString());
+            config.setPath(template.path().toAbsolutePath().normalize().toString());
             config.save();
 
             Files.createDirectories(template.path());

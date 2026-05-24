@@ -12,16 +12,20 @@ import eu.kryocloud.network.KryoProtocolServer;
 import eu.kryocloud.network.auth.AuthManager;
 import eu.kryocloud.node.config.LaunchConfig;
 import eu.kryocloud.node.config.NodeSecurityConfig;
+import eu.kryocloud.node.config.network.NetworkAddressConfig;
 import eu.kryocloud.node.config.setup.WrapperSetupConfig;
 import eu.kryocloud.node.console.CommandRegistry;
 import eu.kryocloud.node.console.KryoConsole;
 import eu.kryocloud.node.console.NodeConsoleCommands;
+import eu.kryocloud.node.console.wizard.CloudHomeSetupWizard;
 import eu.kryocloud.node.console.wizard.CloudSetupWizard;
 import eu.kryocloud.node.database.DatabaseProvider;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.ServiceManager;
+import eu.kryocloud.network.protocol.CloudServiceState;
 import eu.kryocloud.node.service.runtime.NodeServicePacketHandlers;
 import eu.kryocloud.node.service.runtime.NodeServiceRegistry;
+import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
 import eu.kryocloud.node.template.TemplateManager;
 import eu.kryocloud.node.version.NodeVersionStorage;
@@ -52,6 +56,7 @@ public class KryoNode implements INode {
     private NodeServicePacketHandlers servicePacketHandlers;
     private NodeServiceScheduler serviceScheduler;
     private NodeVersionStorage versionStorage;
+    private NetworkAddressConfig networkAddressConfig;
     private KryoConsole console;
 
     public KryoNode() {
@@ -64,6 +69,8 @@ public class KryoNode implements INode {
         }
 
         try {
+            KryoDirectoryLayout.bootstrap();
+            new CloudHomeSetupWizard().run();
             KryoDirectoryLayout.ensureNodeDirectories();
 
             configProvider = new ConfigProvider();
@@ -71,8 +78,9 @@ public class KryoNode implements INode {
             LaunchConfig launchConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("launch.cfg"), LaunchConfig.class);
             NodeSecurityConfig securityConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("security.cfg"), NodeSecurityConfig.class);
             WrapperSetupConfig wrapperSetupConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("wrapper.cfg"), WrapperSetupConfig.class);
+            networkAddressConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("network.cfg"), NetworkAddressConfig.class);
 
-            new CloudSetupWizard().run(launchConfig, securityConfig, wrapperSetupConfig);
+            new CloudSetupWizard().run(launchConfig, securityConfig, wrapperSetupConfig, networkAddressConfig);
             AuthManager.registerToken(securityConfig.getToken());
 
             databaseProvider = new DatabaseProvider();
@@ -89,17 +97,17 @@ public class KryoNode implements INode {
             wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry, this::handleWrapperAvailable);
             wrapperPacketHandlers.register();
 
-            servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry);
+            servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry, this::handleServiceStateChanged);
             servicePacketHandlers.register();
 
             protocolServer = new KryoProtocolServer(launchConfig.getHost(), launchConfig.getPort());
             protocolServer.start();
 
             CommandRegistry commandRegistry = NodeConsoleCommands.createDefaultRegistry();
-            console = new KryoConsole(this, commandRegistry);
+            console = new KryoConsole(this, commandRegistry, launchConfig.getCloudName());
             console.start();
 
-            LOGGER.success("KryoCloud node started on " + launchConfig.getHost() + ":" + launchConfig.getPort());
+            LOGGER.success("KryoCloud " + launchConfig.getCloudName() + " node started on " + launchConfig.getHost() + ":" + launchConfig.getPort());
             LOGGER.info("Reserved web endpoint " + launchConfig.getWebHost() + ":" + launchConfig.getWebPort());
         } catch (Exception exception) {
             shutdown();
@@ -148,6 +156,7 @@ public class KryoNode implements INode {
         versionStorage = null;
 
         if (configProvider != null) {
+            configProvider.unregisterConfig(NetworkAddressConfig.class);
             configProvider.unregisterConfig(WrapperSetupConfig.class);
             configProvider.unregisterConfig(NodeSecurityConfig.class);
             configProvider.unregisterConfig(LaunchConfig.class);
@@ -155,6 +164,30 @@ public class KryoNode implements INode {
         }
 
         LOGGER.success("KryoCloud node stopped.");
+    }
+
+    private void handleServiceStateChanged(NodeServiceSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+
+        if (!running.get()) {
+            return;
+        }
+
+        if (snapshot.state() != CloudServiceState.STOPPED) {
+            return;
+        }
+
+        try {
+            List<?> results = serviceScheduler.reconcileMinimumServices();
+
+            if (!results.isEmpty()) {
+                LOGGER.success("Auto-start requested " + results.size() + " replacement Minecraft service(s) after " + snapshot.serviceId() + " stopped.");
+            }
+        } catch (Exception exception) {
+            LOGGER.warn("Auto-start replacement failed after " + snapshot.serviceId() + " stopped: " + exception.getMessage());
+        }
     }
 
     private void handleWrapperAvailable(WrapperSnapshot snapshot) {
@@ -212,6 +245,10 @@ public class KryoNode implements INode {
 
     public NodeVersionStorage versionStorage() {
         return versionStorage;
+    }
+
+    public NetworkAddressConfig networkAddressConfig() {
+        return networkAddressConfig;
     }
 
     public static void main(String[] args) {

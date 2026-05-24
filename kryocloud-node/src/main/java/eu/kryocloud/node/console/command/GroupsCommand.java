@@ -113,7 +113,7 @@ public final class GroupsCommand implements ConsoleCommand {
 
         for (IGroup group : groups) {
             int active = context.node().serviceRegistry().activeServiceCount(group.name());
-            context.print(" " + ConsoleTheme.bullet() + " " + context.accent(group.name()) + context.muted("  •  ") + group.serviceType() + context.muted("  •  ") + group.software() + " " + group.softwareVersion() + context.muted("  •  ") + active + "/" + group.minCount() + " online");
+            context.print(" " + ConsoleTheme.bullet() + " " + context.accent(group.name()) + context.muted("  •  ") + group.serviceType() + context.muted("  •  ") + group.software() + " " + group.softwareVersion() + context.muted("  •  ") + active + "/" + group.minCount() + " online" + context.muted("  •  ") + group.bindAddress());
         }
     }
 
@@ -125,6 +125,7 @@ public final class GroupsCommand implements ConsoleCommand {
         context.row("Type", group.serviceType().name());
         context.row("Template", group.templateName());
         context.row("Software", group.software() + " " + group.softwareVersion());
+        context.row("Bind IP", group.bindAddress());
         context.row("Services", context.node().serviceRegistry().activeServiceCount(group.name()) + " active / " + group.minCount() + " minimum / " + group.maxCount() + " maximum");
         context.row("Memory", group.minMemory() + "-" + group.maxMemory() + "MB");
         context.row("Base port", String.valueOf(group.basePort()));

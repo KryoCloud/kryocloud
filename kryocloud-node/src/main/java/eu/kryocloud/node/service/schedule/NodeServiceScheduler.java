@@ -73,7 +73,7 @@ public final class NodeServiceScheduler {
         }
 
         UUID requestId = UUID.randomUUID();
-        optionalConnection.get().send(new ServiceStartRequestPacket(requestId, plan.serviceId(), plan.groupName(), plan.templateName(), plan.serviceType(), plan.port(), plan.maxMemoryMb(), plan.staticService()));
+        optionalConnection.get().send(new ServiceStartRequestPacket(requestId, plan.serviceId(), plan.groupName(), plan.templateName(), plan.bindAddress(), plan.serviceType(), plan.port(), plan.maxMemoryMb(), plan.staticService()));
 
         return new ServiceStartResult(requestId, plan.serviceId(), wrapper.wrapperId());
     }
@@ -258,7 +258,7 @@ public final class NodeServiceScheduler {
 
     private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber) {
         int port = group.basePort() + serviceNumber - 1;
-        return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices());
+        return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), group.bindAddress(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices());
     }
 
     private CloudServiceType mapType(ServiceType type) {

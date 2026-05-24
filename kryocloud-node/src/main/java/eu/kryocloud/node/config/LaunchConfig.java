@@ -7,8 +7,14 @@ import java.nio.file.Path;
 
 public class LaunchConfig extends Config {
 
+    @Comment("Internal KryoCloud name used for prompts, screen sessions and multi-cloud hosts")
+    private String cloudName = "kryocloud";
+
     @Comment("Whether the first-start setup wizard has completed")
     private boolean setupComplete = false;
+
+    @Comment("KryoCloud data directory used for configs, templates, versions and runtime files")
+    private String dataDirectory = "";
 
     @Comment("Host to bind the node protocol to")
     private String host = "0.0.0.0";
@@ -35,12 +41,28 @@ public class LaunchConfig extends Config {
         super(path);
     }
 
+    public String getCloudName() {
+        return cloudName;
+    }
+
+    public void setCloudName(String cloudName) {
+        this.cloudName = cloudName;
+    }
+
     public boolean isSetupComplete() {
         return setupComplete;
     }
 
     public void setSetupComplete(boolean setupComplete) {
         this.setupComplete = setupComplete;
+    }
+
+    public String getDataDirectory() {
+        return dataDirectory;
+    }
+
+    public void setDataDirectory(String dataDirectory) {
+        this.dataDirectory = dataDirectory;
     }
 
     public String getHost() {

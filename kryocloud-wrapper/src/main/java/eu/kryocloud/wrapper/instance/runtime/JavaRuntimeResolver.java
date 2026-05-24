@@ -22,6 +22,7 @@ public final class JavaRuntimeResolver {
 
     private final Path runtimeDirectory;
     private final Duration probeTimeout;
+    private final TemurinJavaInstaller installer;
 
     public JavaRuntimeResolver(Path runtimeDirectory, Duration probeTimeout) {
         if (runtimeDirectory == null) {
@@ -34,6 +35,7 @@ public final class JavaRuntimeResolver {
 
         this.runtimeDirectory = runtimeDirectory;
         this.probeTimeout = probeTimeout;
+        this.installer = new TemurinJavaInstaller(runtimeDirectory, Duration.ofMinutes(10));
     }
 
     public JavaRuntime resolve(int requiredMajorVersion, List<String> requestedFlags) {
@@ -45,32 +47,65 @@ public final class JavaRuntimeResolver {
             throw new IllegalArgumentException("requestedFlags must not be null");
         }
 
-        for (String executable : candidates(requiredMajorVersion)) {
-            int majorVersion = probeMajorVersion(executable);
+        for (String executable : managedCandidates(requiredMajorVersion)) {
+            JavaRuntime runtime = runtime(executable, requiredMajorVersion, requestedFlags);
 
-            if (majorVersion < requiredMajorVersion) {
-                LOGGER.warn("Skipping Java runtime " + executable + " because it is Java " + majorVersion + " but service requires Java " + requiredMajorVersion);
-                continue;
+            if (runtime != null) {
+                return runtime;
             }
-
-            FlagProbeResult flags = sanitizeFlags(executable, requestedFlags);
-            return new JavaRuntime(executable, majorVersion, flags.acceptedFlags(), flags.rejectedFlags());
         }
 
-        throw new IllegalStateException("No Java runtime found for Minecraft service requiring Java " + requiredMajorVersion + ". Install Java " + requiredMajorVersion + " under " + runtimeDirectory + "/java-" + requiredMajorVersion + " or set JAVA_" + requiredMajorVersion + "_HOME.");
+        try {
+            Path managedExecutable = installer.ensureInstalled(requiredMajorVersion);
+            JavaRuntime managedRuntime = runtime(managedExecutable.toAbsolutePath().toString(), requiredMajorVersion, requestedFlags);
+
+            if (managedRuntime != null) {
+                return managedRuntime;
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Managed Temurin Java " + requiredMajorVersion + " installation failed: " + exception.getMessage());
+        }
+
+        for (String executable : fallbackCandidates(requiredMajorVersion)) {
+            JavaRuntime runtime = runtime(executable, requiredMajorVersion, requestedFlags);
+
+            if (runtime != null) {
+                return runtime;
+            }
+        }
+
+        throw new IllegalStateException("No exact Java " + requiredMajorVersion + " runtime found. KryoCloud tried managed Temurin under " + runtimeDirectory + " and exact-version environment candidates.");
     }
 
-    private List<String> candidates(int requiredMajorVersion) {
+    private JavaRuntime runtime(String executable, int requiredMajorVersion, List<String> requestedFlags) {
+        int majorVersion = probeMajorVersion(executable);
+
+        if (majorVersion != requiredMajorVersion) {
+            LOGGER.warn("Skipping Java runtime " + executable + " because it is Java " + majorVersion + " but this Minecraft version requires Java " + requiredMajorVersion);
+            return null;
+        }
+
+        FlagProbeResult flags = sanitizeFlags(executable, requestedFlags);
+        return new JavaRuntime(executable, majorVersion, flags.acceptedFlags(), flags.rejectedFlags());
+    }
+
+    private List<String> managedCandidates(int requiredMajorVersion) {
+        List<String> candidates = new ArrayList<>();
+        addDirectoryCandidate(candidates, runtimeDirectory.resolve("java-" + requiredMajorVersion));
+        addDirectoryCandidate(candidates, runtimeDirectory.resolve("jdk-" + requiredMajorVersion));
+        addMatchingRuntimeDirectories(candidates, requiredMajorVersion);
+        return candidates.stream().distinct().toList();
+    }
+
+    private List<String> fallbackCandidates(int requiredMajorVersion) {
         List<String> candidates = new ArrayList<>();
 
         addEnvironmentCandidate(candidates, "JAVA_" + requiredMajorVersion + "_HOME");
         addEnvironmentCandidate(candidates, "JAVA" + requiredMajorVersion + "_HOME");
-        addEnvironmentCandidate(candidates, "JAVA_HOME");
         addDirectoryCandidate(candidates, runtimeDirectory.resolve("java-" + requiredMajorVersion));
         addDirectoryCandidate(candidates, runtimeDirectory.resolve("jdk-" + requiredMajorVersion));
         addMatchingRuntimeDirectories(candidates, requiredMajorVersion);
 
-        candidates.add("java");
         return candidates.stream().distinct().toList();
     }
 
@@ -176,7 +211,7 @@ public final class JavaRuntimeResolver {
         }
 
         if (!rejected.isEmpty()) {
-            LOGGER.warn("Skipped unsupported JVM flags for " + executable + ": " + rejected);
+            LOGGER.warn("Skipped unsupported JVM flags for Java " + executable + ": " + rejected);
         }
 
         return new FlagProbeResult(accepted, rejected);

@@ -98,7 +98,7 @@ public final class StartServiceCommand implements ConsoleCommand {
         boolean staticService = arguments.size() >= 8 && Boolean.parseBoolean(arguments.get(7));
 
         animation.spin(context, "preparing manual Minecraft service " + serviceId, Duration.ofMillis(650));
-        ServiceStartResult result = context.node().serviceScheduler().start(new ServiceStartPlan(serviceId, groupName, templateName, serviceType, port, memoryMb, staticService));
+        ServiceStartResult result = context.node().serviceScheduler().start(new ServiceStartPlan(serviceId, groupName, templateName, "127.0.0.1", serviceType, port, memoryMb, staticService));
         animation.success(context, "Manual start request sent for " + result.serviceId());
         context.print("  Request: " + result.requestId());
         context.print("  Wrapper: " + result.wrapperId());

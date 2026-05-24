@@ -2,6 +2,7 @@ package eu.kryocloud.node.template;
 
 import eu.kryocloud.common.config.Comment;
 import eu.kryocloud.common.config.Config;
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
 
 import java.nio.file.Path;
 
@@ -18,7 +19,7 @@ public final class TemplateConfig extends Config {
     }
 
     public Template toTemplate() {
-        return new Template(requireNonBlank(name, "name"), Path.of(requireNonBlank(path, "path")));
+        return new Template(requireNonBlank(name, "name"), templatePath(requireNonBlank(path, "path")));
     }
 
     public String getName() {
@@ -35,6 +36,20 @@ public final class TemplateConfig extends Config {
 
     public void setPath(String path) {
         this.path = path;
+    }
+
+    private Path templatePath(String rawPath) {
+        Path configuredPath = Path.of(rawPath);
+
+        if (configuredPath.isAbsolute()) {
+            return configuredPath.normalize();
+        }
+
+        if (rawPath.startsWith("templates/") || rawPath.startsWith("templates\\")) {
+            return KryoDirectoryLayout.ROOT.resolve(rawPath).toAbsolutePath().normalize();
+        }
+
+        return KryoDirectoryLayout.TEMPLATES.resolve(rawPath).toAbsolutePath().normalize();
     }
 
     private String requireNonBlank(String value, String name) {

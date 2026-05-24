@@ -2,8 +2,11 @@ package eu.kryocloud.node.console.wizard;
 
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.node.config.group.GroupConfig;
+import eu.kryocloud.node.config.network.NetworkAddressConfig;
 import eu.kryocloud.node.console.ConsoleContext;
 import eu.kryocloud.node.version.VersionInstallResult;
+
+import java.util.List;
 
 public final class GroupSetupWizard {
 
@@ -18,14 +21,15 @@ public final class GroupSetupWizard {
         String templateName = context.ask("Template name:", groupName);
         String serviceType = askServiceType(context);
         boolean staticServices = context.confirm("Use persistent static service directory?", defaultStatic(serviceType));
-        String software = context.ask("Minecraft software:", "paper");
+        String bindAddress = askBindAddress(context, serviceType);
+        String software = context.ask("Minecraft software:", defaultSoftware(serviceType));
         String softwareVersion = context.ask("Minecraft version:", "latest");
         boolean installOnStart = context.confirm("Install and materialize software automatically before start?", true);
         int serviceCount = askPositiveInt(context, "Default service count:", 1);
         int minCount = askNonNegativeInt(context, "Minimum online services:", serviceCount);
         int maxCount = askMaxCount(context, "Maximum online services:", Math.max(serviceCount, minCount), minCount);
-        int minMemory = askPositiveInt(context, "Minimum memory in MB:", 512);
-        int maxMemory = askAtLeast(context, "Maximum memory in MB:", 1024, minMemory);
+        int minMemory = askPositiveInt(context, "Minimum memory in MB:", defaultMinMemory(serviceType));
+        int maxMemory = askAtLeast(context, "Maximum memory in MB:", defaultMaxMemory(serviceType), minMemory);
         int maxPlayers = askPositiveInt(context, "Maximum players:", 100);
         int startNewPercent = askPercent(context, "Start new service at percent:", 80);
         int basePort = askPort(context, "Base port:", defaultPort(serviceType));
@@ -36,6 +40,7 @@ public final class GroupSetupWizard {
         config.setTemplateName(templateName);
         config.setServiceType(serviceType);
         config.setStaticServices(staticServices);
+        config.setBindAddress(bindAddress);
         config.setSoftware(software);
         config.setSoftwareVersion(softwareVersion);
         config.setInstallOnStart(installOnStart);
@@ -57,6 +62,7 @@ public final class GroupSetupWizard {
         context.success("Created Minecraft group " + group.name());
         context.print("  Template: " + config.getTemplateName());
         context.print("  Software: " + config.getSoftware() + " " + config.getSoftwareVersion());
+        context.print("  Bind: " + config.getBindAddress());
         context.print("  Static: " + config.isStaticServices());
         context.print("  Minimum services: " + group.minCount());
 
@@ -114,6 +120,41 @@ public final class GroupSetupWizard {
         }
     }
 
+    private String askBindAddress(ConsoleContext context, String serviceType) {
+        NetworkAddressConfig networkConfig = context.node().networkAddressConfig();
+        String fallback = networkConfig.defaultFor(serviceType);
+
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            context.info("Proxy groups should bind to a public address.");
+        }
+
+        if (!"PROXY".equalsIgnoreCase(serviceType)) {
+            context.info("Backend server groups should bind to a local/private address.");
+        }
+
+        List<String> addresses = networkConfig.addressesFor(serviceType);
+
+        if (!addresses.isEmpty()) {
+            context.print("  Available: " + String.join(", ", addresses));
+        }
+
+        if (!context.confirm("Use different bind IP?", false)) {
+            return fallback;
+        }
+
+        String address = context.ask("Bind IP:", fallback);
+
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            networkConfig.addProxyAddress(address);
+            networkConfig.save();
+            return address;
+        }
+
+        networkConfig.addServerAddress(address);
+        networkConfig.save();
+        return address;
+    }
+
     private boolean defaultStatic(String serviceType) {
         if ("PROXY".equals(serviceType)) {
             return true;
@@ -122,12 +163,36 @@ public final class GroupSetupWizard {
         return false;
     }
 
+    private String defaultSoftware(String serviceType) {
+        if ("PROXY".equals(serviceType)) {
+            return "flamecord";
+        }
+
+        return "paper";
+    }
+
     private int defaultPort(String serviceType) {
         if ("PROXY".equals(serviceType)) {
-            return 25577;
+            return 25565;
         }
 
         return 25565;
+    }
+
+    private int defaultMinMemory(String serviceType) {
+        if ("PROXY".equals(serviceType)) {
+            return 256;
+        }
+
+        return 512;
+    }
+
+    private int defaultMaxMemory(String serviceType) {
+        if ("PROXY".equals(serviceType)) {
+            return 512;
+        }
+
+        return 1024;
     }
 
     private int askPositiveInt(ConsoleContext context, String question, int fallback) {

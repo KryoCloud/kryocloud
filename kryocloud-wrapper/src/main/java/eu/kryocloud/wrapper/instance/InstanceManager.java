@@ -34,13 +34,18 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public final class InstanceManager implements IInstanceManager {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("InstanceManager");
 
+    private final String cloudName;
     private final String wrapperId;
     private final String advertisedAddress;
     private final IScreenManager screenManager;
@@ -50,10 +55,21 @@ public final class InstanceManager implements IInstanceManager {
     private final Duration shutdownTimeout;
     private final InstanceReadinessProbe readinessProbe;
     private final InstanceMetricsCollector metricsCollector;
+    private final ScheduledExecutorService watcherExecutor;
     private final ConcurrentMap<String, ICloudInstance> cloudInstances = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> screenSessions = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, InstanceSnapshot> snapshots = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, KryoConnection> nodeConnections = new ConcurrentHashMap<>();
 
-    public InstanceManager(String wrapperId, String advertisedAddress, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, int startupProbeSeconds, int shutdownTimeoutSeconds) {
+    public InstanceManager(String cloudName, String wrapperId, String advertisedAddress, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, int startupProbeSeconds, int shutdownTimeoutSeconds) {
+        if (cloudName == null || cloudName.isBlank()) {
+            throw new IllegalArgumentException("cloudName must not be blank");
+        }
+
+        if (!cloudName.matches("[A-Za-z0-9_.-]+")) {
+            throw new IllegalArgumentException("cloudName contains unsupported characters: " + cloudName);
+        }
+
         if (wrapperId == null || wrapperId.isBlank()) {
             throw new IllegalArgumentException("wrapperId must not be blank");
         }
@@ -82,6 +98,7 @@ public final class InstanceManager implements IInstanceManager {
             throw new IllegalArgumentException("shutdownTimeoutSeconds must be greater than 0");
         }
 
+        this.cloudName = cloudName;
         this.wrapperId = wrapperId;
         this.advertisedAddress = advertisedAddress;
         this.screenManager = screenManager;
@@ -91,11 +108,22 @@ public final class InstanceManager implements IInstanceManager {
         this.shutdownTimeout = Duration.ofSeconds(shutdownTimeoutSeconds);
         this.readinessProbe = new InstanceReadinessProbe(Duration.ofMillis(500));
         this.metricsCollector = new InstanceMetricsCollector();
+        this.watcherExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "kryocloud-instance-watchdog");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.watcherExecutor.scheduleAtFixedRate(this::watchInstancesSafely, 1L, 1L, TimeUnit.SECONDS);
     }
 
     @Override
     public ICloudInstance create(String name, String javaExecutable, Path workingDirectory, int minMemory, int maxMemory, List<String> jvmArgs) {
-        validateName(name);
+        return create(name, name, javaExecutable, workingDirectory, minMemory, maxMemory, jvmArgs);
+    }
+
+    private ICloudInstance create(String serviceId, String screenSession, String javaExecutable, Path workingDirectory, int minMemory, int maxMemory, List<String> jvmArgs) {
+        validateName(serviceId);
+        validateName(screenSession);
 
         if (javaExecutable == null || javaExecutable.isBlank()) {
             throw new IllegalArgumentException("javaExecutable must not be blank");
@@ -117,16 +145,17 @@ public final class InstanceManager implements IInstanceManager {
             throw new IllegalArgumentException("jvmArgs must not be null");
         }
 
-        IScreen screen = screenManager.create(name, workingDirectory);
-        InstanceProcessSpec processSpec = new InstanceProcessSpec(name, javaExecutable, workingDirectory, minMemory, maxMemory, jvmArgs, "server.jar");
+        IScreen screen = screenManager.create(screenSession, workingDirectory);
+        InstanceProcessSpec processSpec = new InstanceProcessSpec(serviceId, javaExecutable, workingDirectory, minMemory, maxMemory, jvmArgs, "server.jar");
         ICloudInstance instance = new CloudInstance(processSpec, screen);
-        ICloudInstance existing = cloudInstances.putIfAbsent(name, instance);
+        ICloudInstance existing = cloudInstances.putIfAbsent(serviceId, instance);
 
         if (existing != null) {
-            screenManager.remove(name);
-            throw new IllegalStateException("Minecraft instance already exists: " + name);
+            screenManager.remove(screenSession);
+            throw new IllegalStateException("Minecraft instance already exists: " + serviceId);
         }
 
+        screenSessions.put(serviceId, screenSession);
         return instance;
     }
 
@@ -172,7 +201,8 @@ public final class InstanceManager implements IInstanceManager {
             JavaRuntime javaRuntime = javaRuntimeResolver.resolve(workspace.javaVersion(workingDirectory), workspace.javaFlags(workingDirectory));
             sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft instance with Java " + javaRuntime.majorVersion());
 
-            ICloudInstance instance = create(packet.serviceId(), javaRuntime.executable(), workingDirectory, packet.maxMemoryMb(), packet.maxMemoryMb(), finalJvmArgs(packet, javaRuntime.acceptedFlags()));
+            String screenSession = screenSessionName(packet);
+            ICloudInstance instance = create(packet.serviceId(), screenSession, javaRuntime.executable(), workingDirectory, packet.maxMemoryMb(), packet.maxMemoryMb(), finalJvmArgs(packet, javaRuntime.acceptedFlags()));
             InstanceSnapshot snapshot = new InstanceSnapshot(packet.requestId(), packet.serviceId(), packet.groupName(), packet.templateName(), packet.serviceType(), packet.port(), packet.maxMemoryMb(), packet.staticService(), workingDirectory, instance, CloudServiceState.STARTING, Instant.now());
             InstanceSnapshot existing = snapshots.putIfAbsent(packet.serviceId(), snapshot);
 
@@ -199,8 +229,9 @@ public final class InstanceManager implements IInstanceManager {
 
             InstanceSnapshot runningSnapshot = snapshot.withState(CloudServiceState.RUNNING);
             snapshots.put(packet.serviceId(), runningSnapshot);
+            nodeConnections.put(packet.serviceId(), nodeConnection);
             sendState(nodeConnection, packet, CloudServiceState.RUNNING, readiness.message());
-            LOGGER.success("Started Minecraft instance " + packet.serviceId() + " on port " + packet.port());
+            LOGGER.success("Started Minecraft instance " + packet.serviceId() + " in screen " + screenSession + " on port " + packet.port());
 
             return Optional.of(runningSnapshot);
         } catch (Exception exception) {
@@ -360,15 +391,76 @@ public final class InstanceManager implements IInstanceManager {
         }
 
         snapshots.clear();
+        screenSessions.clear();
     }
 
     public void shutdown() {
+        watcherExecutor.shutdownNow();
+
         for (InstanceSnapshot snapshot : snapshots.values()) {
             stopSnapshot(snapshot.serviceId(), snapshot, false);
         }
 
         snapshots.clear();
         cloudInstances.clear();
+        screenSessions.clear();
+        nodeConnections.clear();
+    }
+
+    private void watchInstancesSafely() {
+        try {
+            watchInstances();
+        } catch (Exception exception) {
+            LOGGER.warn("Minecraft instance watchdog failed: " + message(exception, "watchdog failed"));
+        }
+    }
+
+    private void watchInstances() {
+        for (InstanceSnapshot snapshot : snapshots.values()) {
+            if (!watchable(snapshot)) {
+                continue;
+            }
+
+            if (isOnline(snapshot.instance())) {
+                continue;
+            }
+
+            handleExternalStop(snapshot);
+        }
+    }
+
+    private boolean watchable(InstanceSnapshot snapshot) {
+        if (snapshot == null) {
+            return false;
+        }
+
+        return snapshot.state() == CloudServiceState.RUNNING;
+    }
+
+    private void handleExternalStop(InstanceSnapshot snapshot) {
+        if (!snapshots.remove(snapshot.serviceId(), snapshot)) {
+            return;
+        }
+
+        KryoConnection connection = nodeConnections.remove(snapshot.serviceId());
+        unregister(snapshot.serviceId());
+        boolean cleaned = workspace.cleanupTemporary(snapshot.staticService(), snapshot.workingDirectory());
+        String message = cleaned ? "Minecraft instance stopped outside KryoCloud and was deleted" : "Minecraft instance stopped outside KryoCloud, but temporary cleanup failed";
+
+        if (connection != null && connection.isActive()) {
+            try {
+                sendState(connection, snapshot, CloudServiceState.STOPPED, message);
+            } catch (Exception exception) {
+                LOGGER.warn("Failed to notify node about stopped Minecraft instance " + snapshot.serviceId() + ": " + exception.getMessage());
+            }
+        }
+
+        if (!cleaned) {
+            LOGGER.warn("Temporary Minecraft workspace was not deleted after external stop: " + snapshot.workingDirectory());
+            return;
+        }
+
+        LOGGER.success("Detected stopped Minecraft instance " + snapshot.serviceId() + " and cleaned its workspace.");
     }
 
     private void respondLogs(KryoConnection nodeConnection, ServiceLogsRequestPacket packet, String logs, String message) {
@@ -403,12 +495,52 @@ public final class InstanceManager implements IInstanceManager {
         return output.toString().stripTrailing();
     }
 
+    private String screenSessionName(ServiceStartRequestPacket packet) {
+        return sanitizeScreenPart(cloudName) + "-" + sanitizeScreenPart(packet.groupName()) + "-" + serviceNumber(packet) + "-" + UUID.randomUUID();
+    }
+
+    private String serviceNumber(ServiceStartRequestPacket packet) {
+        String prefix = packet.groupName() + "-";
+
+        if (packet.serviceId().startsWith(prefix)) {
+            String suffix = packet.serviceId().substring(prefix.length());
+
+            if (!suffix.isBlank()) {
+                return sanitizeScreenPart(suffix);
+            }
+        }
+
+        int separator = packet.serviceId().lastIndexOf('-');
+
+        if (separator >= 0 && separator < packet.serviceId().length() - 1) {
+            return sanitizeScreenPart(packet.serviceId().substring(separator + 1));
+        }
+
+        return sanitizeScreenPart(packet.serviceId());
+    }
+
+    private String sanitizeScreenPart(String value) {
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+
+        String sanitized = value.toLowerCase().replaceAll("[^a-z0-9_.-]", "-").replaceAll("-+", "-").replaceAll("^-|-$", "");
+
+        if (!sanitized.isBlank()) {
+            return sanitized;
+        }
+
+        return "unknown";
+    }
+
     private List<String> finalJvmArgs(ServiceStartRequestPacket packet, List<String> javaFlags) {
         List<String> arguments = new ArrayList<>(javaFlags);
         arguments.add("-Dkryocloud.service.id=" + packet.serviceId());
         arguments.add("-Dkryocloud.group=" + packet.groupName());
         arguments.add("-Dkryocloud.template=" + packet.templateName());
         arguments.add("-Dkryocloud.static=" + packet.staticService());
+        arguments.add("-Dkryocloud.bind.address=" + packet.bindAddress());
+        arguments.add("-Dserver.ip=" + packet.bindAddress());
         return List.copyOf(arguments);
     }
 
@@ -482,10 +614,16 @@ public final class InstanceManager implements IInstanceManager {
     }
 
     private void unregister(String serviceId) {
+        nodeConnections.remove(serviceId);
         cloudInstances.remove(serviceId);
+        String screenSession = screenSessions.remove(serviceId);
+
+        if (screenSession == null || screenSession.isBlank()) {
+            screenSession = serviceId;
+        }
 
         try {
-            screenManager.remove(serviceId);
+            screenManager.remove(screenSession);
         } catch (Exception exception) {
             LOGGER.warn("Failed to unregister Minecraft screen " + serviceId + ": " + exception.getMessage());
         }

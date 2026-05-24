@@ -43,6 +43,7 @@ public final class KryoWrapper implements IWrapper {
 
     public void start() {
         try {
+            KryoDirectoryLayout.bootstrap();
             KryoDirectoryLayout.ensureWrapperDirectories();
 
             configProvider = new ConfigProvider();
@@ -52,7 +53,7 @@ public final class KryoWrapper implements IWrapper {
             String nodeHost = requireNonBlank(launchConfig.getNodeHost(), "nodeHost");
             String token = requireNonBlank(launchConfig.getToken(), "token");
             String advertisedAddress = requireNonBlank(launchConfig.getAdvertisedAddress(), "advertisedAddress");
-            Path javaRuntimesDirectory = Path.of(requireNonBlank(launchConfig.getJavaRuntimesDirectory(), "javaRuntimesDirectory"));
+            Path javaRuntimesDirectory = runtimeDirectory(requireNonBlank(launchConfig.getJavaRuntimesDirectory(), "javaRuntimesDirectory"));
 
             validatePort(launchConfig.getNodePort(), "nodePort");
             validatePositive(launchConfig.getMaxMemoryMb(), "maxMemoryMb");
@@ -62,7 +63,7 @@ public final class KryoWrapper implements IWrapper {
             screenManager = new ScreenManager();
             InstanceWorkspace workspace = new InstanceWorkspace(KryoDirectoryLayout.TEMPLATES, KryoDirectoryLayout.TMP, KryoDirectoryLayout.STATIC);
             JavaRuntimeResolver javaRuntimeResolver = new JavaRuntimeResolver(javaRuntimesDirectory, Duration.ofSeconds(3));
-            instanceManager = new InstanceManager(wrapperId, advertisedAddress, screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
+            instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
             instancePacketHandlers = new InstancePacketHandlers(instanceManager);
             instancePacketHandlers.register();
 
@@ -138,6 +139,24 @@ public final class KryoWrapper implements IWrapper {
     public static void main(String[] args) {
         KryoWrapper wrapper = new KryoWrapper();
         Runtime.getRuntime().addShutdownHook(new Thread(wrapper::shutdown, "kryocloud-wrapper-shutdown"));
+    }
+
+    private Path runtimeDirectory(String configuredDirectory) {
+        if (configuredDirectory == null || configuredDirectory.isBlank()) {
+            return KryoDirectoryLayout.JDK;
+        }
+
+        if ("runtimes".equalsIgnoreCase(configuredDirectory.trim())) {
+            return KryoDirectoryLayout.JDK;
+        }
+
+        Path path = Path.of(configuredDirectory);
+
+        if (path.isAbsolute()) {
+            return path.normalize();
+        }
+
+        return KryoDirectoryLayout.ROOT.resolve(path).toAbsolutePath().normalize();
     }
 
     private String hostname() {

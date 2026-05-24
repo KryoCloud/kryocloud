@@ -2,7 +2,7 @@ package eu.kryocloud.node.service.schedule;
 
 import eu.kryocloud.network.protocol.CloudServiceType;
 
-public record ServiceStartPlan(String serviceId, String groupName, String templateName, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService) {
+public record ServiceStartPlan(String serviceId, String groupName, String templateName, String bindAddress, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService) {
 
     public ServiceStartPlan {
         if (serviceId == null || serviceId.isBlank()) {
@@ -15,6 +15,10 @@ public record ServiceStartPlan(String serviceId, String groupName, String templa
 
         if (templateName == null || templateName.isBlank()) {
             throw new IllegalArgumentException("templateName must not be blank");
+        }
+
+        if (bindAddress == null || bindAddress.isBlank()) {
+            throw new IllegalArgumentException("bindAddress must not be blank");
         }
 
         if (serviceType == null) {
