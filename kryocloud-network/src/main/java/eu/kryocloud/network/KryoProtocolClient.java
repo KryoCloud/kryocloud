@@ -1,7 +1,9 @@
 package eu.kryocloud.network;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.channel.KryoChannelInitializer;
 import eu.kryocloud.network.connection.KryoConnection;
+import eu.kryocloud.network.connection.ProtocolSide;
 import eu.kryocloud.network.packet.Packet;
 import eu.kryocloud.network.packet.type.protocol.HandshakePacket;
 import eu.kryocloud.network.protocol.PeerType;
@@ -20,6 +22,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class KryoProtocolClient implements AutoCloseable {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Protocol");
 
     private final String host;
     private final int port;
@@ -62,7 +66,7 @@ public final class KryoProtocolClient implements AutoCloseable {
 
             try {
                 Bootstrap bootstrap = new Bootstrap();
-                bootstrap.group(newGroup).channel(NioSocketChannel.class).option(ChannelOption.SO_KEEPALIVE, true).option(ChannelOption.TCP_NODELAY, true).handler(new KryoChannelInitializer(this::setConnection, this::clearConnection));
+                bootstrap.group(newGroup).channel(NioSocketChannel.class).option(ChannelOption.SO_KEEPALIVE, true).option(ChannelOption.TCP_NODELAY, true).handler(new KryoChannelInitializer(ProtocolSide.CLIENT, this::setConnection, this::clearConnection));
 
                 ChannelFuture future = bootstrap.connect(host, port).sync();
 
@@ -76,7 +80,7 @@ public final class KryoProtocolClient implements AutoCloseable {
                     newGroup.shutdownGracefully();
                 });
 
-                System.out.println("KryoProtocolClient connected to " + host + ":" + port);
+                LOGGER.success("Client connected to " + host + ":" + port);
             } catch (InterruptedException exception) {
                 newGroup.shutdownGracefully().syncUninterruptibly();
                 Thread.currentThread().interrupt();

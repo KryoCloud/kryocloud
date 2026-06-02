@@ -2,6 +2,7 @@ package eu.kryocloud.network.channel;
 
 import eu.kryocloud.network.KryoProtocol;
 import eu.kryocloud.network.connection.KryoConnection;
+import eu.kryocloud.network.connection.ProtocolSide;
 import eu.kryocloud.network.handler.KryoPacketHandler;
 import eu.kryocloud.network.packet.PacketDecoder;
 import eu.kryocloud.network.packet.PacketEncoder;
@@ -15,10 +16,18 @@ import java.util.function.Consumer;
 
 public final class KryoChannelInitializer extends ChannelInitializer<Channel> {
 
+    private final ProtocolSide side;
     private final Consumer<KryoConnection> connectionOpened;
     private final Consumer<KryoConnection> connectionClosed;
 
     public KryoChannelInitializer(Consumer<KryoConnection> connectionOpened, Consumer<KryoConnection> connectionClosed) {
+        this(ProtocolSide.SERVER, connectionOpened, connectionClosed);
+    }
+
+    public KryoChannelInitializer(ProtocolSide side, Consumer<KryoConnection> connectionOpened, Consumer<KryoConnection> connectionClosed) {
+        if (side == null) {
+            throw new IllegalArgumentException("side must not be null");
+        }
         if (connectionOpened == null) {
             throw new IllegalArgumentException("connectionOpened must not be null");
         }
@@ -27,6 +36,7 @@ public final class KryoChannelInitializer extends ChannelInitializer<Channel> {
             throw new IllegalArgumentException("connectionClosed must not be null");
         }
 
+        this.side = side;
         this.connectionOpened = connectionOpened;
         this.connectionClosed = connectionClosed;
     }
@@ -51,6 +61,6 @@ public final class KryoChannelInitializer extends ChannelInitializer<Channel> {
         pipeline.addLast("frame-encoder", new LengthFieldPrepender(Integer.BYTES));
         pipeline.addLast("packet-encoder", new PacketEncoder());
 
-        pipeline.addLast("packet-handler", new KryoPacketHandler(connectionOpened, connectionClosed));
+        pipeline.addLast("packet-handler", new KryoPacketHandler(side, connectionOpened, connectionClosed));
     }
 }

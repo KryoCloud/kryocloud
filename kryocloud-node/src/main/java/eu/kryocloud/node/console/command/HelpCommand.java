@@ -46,7 +46,7 @@ public final class HelpCommand implements ConsoleCommand {
     public void execute(ConsoleContext context, List<String> arguments) {
         context.header("KryoCloud command tree");
         context.print(context.muted("Commands are object-first: ") + context.code("group Lobby start") + context.muted(" or ") + context.code("service Lobby-1 stop"));
-        context.print(context.muted("Use TAB for completion, arrow-up for history and CTRL+C for ") + context.code("shutdown") + context.muted("."));
+        context.print(context.muted("Use TAB for completion, arrow-up for history and CTRL+C twice within 5s for ") + context.code("shutdown") + context.muted("."));
         context.print("");
 
         printSection(context, "Cloud", List.of(
@@ -81,7 +81,10 @@ public final class HelpCommand implements ConsoleCommand {
                 line("wrapper list", "show wrappers"),
                 line("stats", "show current usage"),
                 line("stats live [seconds]", "animated usage sampling"),
-                line("version install <software> [version]", "install a Minecraft server version"),
+                line("version list", "show dynamically loaded manifest software"),
+                line("version refresh", "reload software list from versions.yaml"),
+                line("version <software> list", "show versions from a software manifest"),
+                line("version <software> install [version]", "install a Minecraft server version"),
                 line("service cleanup [wrapper] [--dry-run]", "remove orphaned tmp workspaces")
         ));
 

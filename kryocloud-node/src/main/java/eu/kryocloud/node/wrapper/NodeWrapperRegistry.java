@@ -1,5 +1,6 @@
 package eu.kryocloud.node.wrapper;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocol;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.wrapper.WrapperHeartbeatPacket;
@@ -15,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public final class NodeWrapperRegistry {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Wrapper");
 
     private final ConcurrentMap<String, WrapperSnapshot> wrappersById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, KryoConnection> connectionsByWrapperId = new ConcurrentHashMap<>();
@@ -32,7 +35,7 @@ public final class NodeWrapperRegistry {
         connectionsByWrapperId.put(packet.wrapperId(), connection);
         wrapperIdByConnectionId.put(connection.id(), packet.wrapperId());
 
-        System.out.println("Registered wrapper " + packet.wrapperId() + " from " + remoteAddress);
+        LOGGER.success("Registered wrapper " + packet.wrapperId() + " from " + remoteAddress);
         return snapshot;
     }
 
@@ -85,7 +88,7 @@ public final class NodeWrapperRegistry {
         connectionsByWrapperId.remove(wrapperId);
         wrapperIdByConnectionId.remove(removedSnapshot.connectionId());
 
-        System.out.println("Unregistered wrapper " + wrapperId);
+        LOGGER.warn("Unregistered wrapper " + wrapperId);
         return Optional.of(removedSnapshot.offline());
     }
 

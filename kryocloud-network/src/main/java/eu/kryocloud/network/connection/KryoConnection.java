@@ -15,6 +15,7 @@ public final class KryoConnection {
 
     private final UUID id = UUID.randomUUID();
     private final Channel channel;
+    private final ProtocolSide side;
     private final Instant connectedAt = Instant.now();
     private final AtomicReference<ProtocolState> state = new AtomicReference<>(ProtocolState.HANDSHAKING);
     private final AtomicLong lastHeartbeatAt = new AtomicLong(System.currentTimeMillis());
@@ -24,11 +25,20 @@ public final class KryoConnection {
     private volatile int protocolVersion = -1;
 
     public KryoConnection(Channel channel) {
+        this(channel, ProtocolSide.SERVER);
+    }
+
+    public KryoConnection(Channel channel, ProtocolSide side) {
         if (channel == null) {
             throw new IllegalArgumentException("channel must not be null");
         }
 
+        if (side == null) {
+            throw new IllegalArgumentException("side must not be null");
+        }
+
         this.channel = channel;
+        this.side = side;
     }
 
     public UUID id() {
@@ -37,6 +47,10 @@ public final class KryoConnection {
 
     public Channel channel() {
         return channel;
+    }
+
+    public ProtocolSide side() {
+        return side;
     }
 
     public Instant connectedAt() {
@@ -136,6 +150,7 @@ public final class KryoConnection {
     public String toString() {
         return "KryoConnection{" +
                 "id=" + id +
+                ", side=" + side +
                 ", state=" + state.get() +
                 ", peerType=" + peerType +
                 ", identity='" + identity + '\'' +

@@ -166,12 +166,28 @@ public final class KryoCommandCompleter implements Completer {
 
     private void completeVersion(List<String> words, int wordIndex, List<Candidate> candidates) {
         if (wordIndex == 1) {
-            add(candidates, "install", "create", "scan");
+            add(candidates, "list", "refresh", "install", "create", "scan");
+            add(candidates, node.versionStorage().availableSoftware());
             return;
         }
 
         if (wordIndex == 2 && keyword(words.get(1), "install")) {
-            add(candidates, "bungeecord", "flamecord", "folia", "leaf", "minestom", "paper", "purpur", "spigot", "velocity");
+            add(candidates, node.versionStorage().availableSoftware());
+            return;
+        }
+
+        if (wordIndex == 2 && !keyword(words.get(1), "list", "refresh", "create", "scan")) {
+            add(candidates, "list", "versions", "info", "install");
+            return;
+        }
+
+        if (wordIndex == 3 && !keyword(words.get(1), "list", "refresh", "create", "scan")) {
+            addVersions(words.get(1), candidates);
+            return;
+        }
+
+        if (wordIndex == 3 && "install".equalsIgnoreCase(words.get(1))) {
+            addVersions(words.get(2), candidates);
         }
     }
 
@@ -183,6 +199,15 @@ public final class KryoCommandCompleter implements Completer {
 
         if (wordIndex == 2 && "group".equalsIgnoreCase(words.get(1))) {
             addGroups(candidates);
+        }
+    }
+
+    private void addVersions(String software, List<Candidate> candidates) {
+        try {
+            add(candidates, "latest");
+            add(candidates, node.versionStorage().availableVersions(software));
+        } catch (Exception exception) {
+            add(candidates, "latest");
         }
     }
 

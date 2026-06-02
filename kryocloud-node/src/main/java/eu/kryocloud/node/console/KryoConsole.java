@@ -20,15 +20,18 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class KryoConsole implements AutoCloseable {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("Console");
+    private static final long INTERRUPT_CONFIRMATION_WINDOW_MILLIS = 5_000L;
 
     private final KryoNode node;
     private final CommandRegistry commandRegistry;
     private final KryoPrompt prompt;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicLong lastInterruptAtMillis = new AtomicLong(0L);
 
     private volatile Thread thread;
     private volatile LineReader reader;
@@ -87,13 +90,15 @@ public final class KryoConsole implements AutoCloseable {
 
     private void runConsole() {
         try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
-            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).history(new DefaultHistory()).completer(new KryoCommandCompleter(node, commandRegistry)).build();
+            KryoCompleter completer = new KryoCompleter(new KryoCommandCompleter(node, commandRegistry));
+            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).history(new DefaultHistory()).completer(completer).build();
             prepareHistory(activeReader);
-            ConsoleContext context = new ConsoleContext(node, terminal, activeReader, running);
+            ConsoleContext context = new ConsoleContext(node, terminal, activeReader, running, completer);
 
             reader = activeReader;
             ConsoleOutput.attach(activeReader);
-            new ConsoleIntro().play(context);
+            ConsoleOutput.runDirect(() -> new ConsoleIntro().play(context));
+            ConsoleOutput.flushDeferred();
             node.markConsoleReady();
 
             while (running.get()) {
@@ -121,6 +126,7 @@ public final class KryoConsole implements AutoCloseable {
     private void readAndExecute(ConsoleContext context, LineReader activeReader) {
         try {
             String line = activeReader.readLine(prompt.render());
+            lastInterruptAtMillis.set(0L);
             execute(context, line);
         } catch (UserInterruptException exception) {
             shutdownFromInterrupt(context);
@@ -133,6 +139,15 @@ public final class KryoConsole implements AutoCloseable {
 
     private void shutdownFromInterrupt(ConsoleContext context) {
         if (!running.get()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        long previous = lastInterruptAtMillis.getAndSet(now);
+
+        if (previous < 1 || now - previous > INTERRUPT_CONFIRMATION_WINDOW_MILLIS) {
+            ConsoleOutput.clearTransient();
+            context.warn("Press CTRL+C again within 5 seconds to shutdown KryoCloud.");
             return;
         }
 

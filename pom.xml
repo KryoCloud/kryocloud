@@ -17,6 +17,8 @@
         <module>kryocloud-launcher</module>
         <module>kryocloud-plugin-api</module>
         <module>kryocloud-wrapper</module>
+        <module>kryocloud-plugins</module>
+        <module>kryocloud-plugins</module>
     </modules>
 
     <properties>

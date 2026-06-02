@@ -75,8 +75,8 @@ public record CloudGroup(UUID uniqueId, String name, String javaVersion, String 
             throw new IllegalArgumentException("startNewPercent must be between 0 and 100");
         }
 
-        if (basePort < 1 || basePort > 65_535) {
-            throw new IllegalArgumentException("basePort must be between 1 and 65535");
+        if (basePort < 0 || basePort > 65_535) {
+            throw new IllegalArgumentException("basePort must be 0 or between 1 and 65535");
         }
 
         services = List.copyOf(services);

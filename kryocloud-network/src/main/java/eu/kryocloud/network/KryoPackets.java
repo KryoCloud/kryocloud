@@ -3,6 +3,9 @@ package eu.kryocloud.network;
 import eu.kryocloud.network.packet.Packet;
 import eu.kryocloud.network.packet.PacketRegistry;
 import eu.kryocloud.network.packet.type.AuthPacket;
+import eu.kryocloud.network.packet.type.plugin.PluginGatewayEventPacket;
+import eu.kryocloud.network.packet.type.plugin.PluginGatewayRequestPacket;
+import eu.kryocloud.network.packet.type.plugin.PluginGatewayResponsePacket;
 import eu.kryocloud.network.packet.type.protocol.HandshakePacket;
 import eu.kryocloud.network.packet.type.protocol.HandshakeResponsePacket;
 import eu.kryocloud.network.packet.type.protocol.HeartbeatPacket;
@@ -52,6 +55,10 @@ public final class KryoPackets {
             register(KryoProtocol.SERVICE_CLEANUP_REQUEST_PACKET_ID, ServiceCleanupRequestPacket.class, ServiceCleanupRequestPacket::new);
             register(KryoProtocol.SERVICE_CLEANUP_RESPONSE_PACKET_ID, ServiceCleanupResponsePacket.class, ServiceCleanupResponsePacket::new);
             register(KryoProtocol.SERVICE_METRICS_PACKET_ID, ServiceMetricsPacket.class, ServiceMetricsPacket::new);
+
+            register(KryoProtocol.PLUGIN_GATEWAY_REQUEST_PACKET_ID, PluginGatewayRequestPacket.class, PluginGatewayRequestPacket::new);
+            register(KryoProtocol.PLUGIN_GATEWAY_RESPONSE_PACKET_ID, PluginGatewayResponsePacket.class, PluginGatewayResponsePacket::new);
+            register(KryoProtocol.PLUGIN_GATEWAY_EVENT_PACKET_ID, PluginGatewayEventPacket.class, PluginGatewayEventPacket::new);
 
             register(KryoProtocol.LEGACY_AUTH_PACKET_ID, AuthPacket.class, AuthPacket::new);
         } catch (RuntimeException exception) {

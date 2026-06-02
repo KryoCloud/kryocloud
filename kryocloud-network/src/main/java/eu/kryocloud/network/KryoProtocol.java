@@ -30,6 +30,10 @@ public final class KryoProtocol {
     public static final int SERVICE_CLEANUP_RESPONSE_PACKET_ID = 0x28;
     public static final int SERVICE_METRICS_PACKET_ID = 0x29;
 
+    public static final int PLUGIN_GATEWAY_REQUEST_PACKET_ID = 0x40;
+    public static final int PLUGIN_GATEWAY_RESPONSE_PACKET_ID = 0x41;
+    public static final int PLUGIN_GATEWAY_EVENT_PACKET_ID = 0x42;
+
     @Deprecated
     public static final int LEGACY_AUTH_PACKET_ID = 0x7F;
 

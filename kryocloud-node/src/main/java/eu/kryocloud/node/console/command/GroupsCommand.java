@@ -128,7 +128,7 @@ public final class GroupsCommand implements ConsoleCommand {
         context.row("Bind IP", group.bindAddress());
         context.row("Services", context.node().serviceRegistry().activeServiceCount(group.name()) + " active / " + group.minCount() + " minimum / " + group.maxCount() + " maximum");
         context.row("Memory", group.minMemory() + "-" + group.maxMemory() + "MB");
-        context.row("Base port", String.valueOf(group.basePort()));
+        context.row("Port strategy", portStrategy(group.basePort()));
         context.row("Static", String.valueOf(group.staticServices()));
         context.row("Install on start", String.valueOf(group.installOnStart()));
 
@@ -151,6 +151,14 @@ public final class GroupsCommand implements ConsoleCommand {
         animation.spin(context, (force ? "killing " : "stopping ") + groupName, Duration.ofMillis(550));
         int sent = context.node().serviceScheduler().stopGroup(groupName, "Group " + groupName + " stop requested from console", force);
         animation.success(context, (force ? "Kill" : "Stop") + " requested for " + sent + " service(s).");
+    }
+
+    private String portStrategy(int basePort) {
+        if (basePort < 1) {
+            return "random backend ports";
+        }
+
+        return "fixed proxy port " + basePort;
     }
 
     private IGroup group(ConsoleContext context, String groupName) {

@@ -9,7 +9,6 @@ public final class KryoLauncher {
     }
 
     public static void main(String[] args) {
-        System.out.println("Starting KryoCloud launcher...");
         KryoNode node = new KryoNode();
         KryoWrapper wrapper = new KryoWrapper();
 

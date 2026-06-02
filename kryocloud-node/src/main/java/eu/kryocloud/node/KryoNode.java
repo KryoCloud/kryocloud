@@ -6,6 +6,7 @@ import eu.kryocloud.api.node.INode;
 import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.common.config.ConfigProvider;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
+import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.common.manifest.ManifestRepository;
 import eu.kryocloud.network.KryoProtocolServer;
@@ -29,6 +30,7 @@ import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
 import eu.kryocloud.node.template.TemplateManager;
 import eu.kryocloud.node.version.NodeVersionStorage;
+import eu.kryocloud.node.plugin.NodePluginGateway;
 import eu.kryocloud.node.wrapper.NodeWrapperPacketHandlers;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
@@ -59,6 +61,7 @@ public class KryoNode implements INode {
     private NodeServicePacketHandlers servicePacketHandlers;
     private NodeServiceScheduler serviceScheduler;
     private NodeVersionStorage versionStorage;
+    private NodePluginGateway pluginGateway;
     private NetworkAddressConfig networkAddressConfig;
     private KryoConsole console;
 
@@ -70,6 +73,8 @@ public class KryoNode implements INode {
         if (!running.compareAndSet(false, true)) {
             return;
         }
+
+        ConsoleOutput.deferBackgroundOutput(true);
 
         try {
             KryoDirectoryLayout.bootstrap();
@@ -96,11 +101,13 @@ public class KryoNode implements INode {
             wrapperRegistry = new NodeWrapperRegistry();
             serviceRegistry = new NodeServiceRegistry();
             serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage);
+            pluginGateway = new NodePluginGateway(wrapperRegistry, serviceRegistry, serviceScheduler, groupManager, templateManager, versionStorage);
+            pluginGateway.register();
 
-            wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry, this::handleWrapperAvailable);
+            wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry, this::handleWrapperRegistered, this::handleWrapperStateChanged, this::handleWrapperHeartbeat);
             wrapperPacketHandlers.register();
 
-            servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry, this::handleServiceStateChanged);
+            servicePacketHandlers = new NodeServicePacketHandlers(serviceRegistry, this::handleServiceStateChanged, this::handleServiceMetricsUpdated);
             servicePacketHandlers.register();
 
             protocolServer = new KryoProtocolServer(launchConfig.getHost(), launchConfig.getPort());
@@ -112,7 +119,12 @@ public class KryoNode implements INode {
 
             LOGGER.success("KryoCloud " + launchConfig.getCloudName() + " node started on " + launchConfig.getHost() + ":" + launchConfig.getPort());
             LOGGER.info("Reserved web endpoint " + launchConfig.getWebHost() + ":" + launchConfig.getWebPort());
+
+            if (pluginGateway != null) {
+                pluginGateway.publishCloudReady();
+            }
         } catch (Exception exception) {
+            ConsoleOutput.flushDeferred();
             shutdown();
             throw new RuntimeException("Failed to start KryoNode", exception);
         }
@@ -121,6 +133,10 @@ public class KryoNode implements INode {
     public void shutdown() {
         if (!running.getAndSet(false)) {
             return;
+        }
+
+        if (pluginGateway != null) {
+            pluginGateway.publishCloudStopping("KryoCloud node shutdown");
         }
 
         stopMinecraftServices();
@@ -133,6 +149,11 @@ public class KryoNode implements INode {
         if (servicePacketHandlers != null) {
             servicePacketHandlers.close();
             servicePacketHandlers = null;
+        }
+
+        if (pluginGateway != null) {
+            pluginGateway.close();
+            pluginGateway = null;
         }
 
         if (wrapperPacketHandlers != null) {
@@ -178,9 +199,13 @@ public class KryoNode implements INode {
         requestMinimumReconcile("after console intro");
     }
 
-    private void handleServiceStateChanged(NodeServiceSnapshot snapshot) {
+    private void handleServiceStateChanged(NodeServiceSnapshot previous, NodeServiceSnapshot snapshot) {
         if (snapshot == null) {
             return;
+        }
+
+        if (pluginGateway != null) {
+            pluginGateway.publishServiceState(previous, snapshot);
         }
 
         if (!running.get()) {
@@ -194,9 +219,26 @@ public class KryoNode implements INode {
         requestMinimumReconcile("after " + snapshot.serviceId() + " stopped");
     }
 
-    private void handleWrapperAvailable(WrapperSnapshot snapshot) {
+    private void handleServiceMetricsUpdated(NodeServiceSnapshot snapshot) {
         if (snapshot == null) {
             return;
+        }
+
+        if (pluginGateway == null) {
+            return;
+        }
+
+        pluginGateway.publishServiceMetrics(snapshot);
+    }
+
+    private void handleWrapperRegistered(WrapperSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+
+        if (pluginGateway != null) {
+            pluginGateway.publishWrapperConnected(snapshot);
+            pluginGateway.publishWrapperState(snapshot);
         }
 
         if (serviceScheduler == null) {
@@ -204,6 +246,35 @@ public class KryoNode implements INode {
         }
 
         requestMinimumReconcile("after wrapper availability");
+    }
+
+
+    private void handleWrapperStateChanged(WrapperSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+
+        if (pluginGateway != null) {
+            pluginGateway.publishWrapperState(snapshot);
+        }
+
+        if (serviceScheduler == null) {
+            return;
+        }
+
+        requestMinimumReconcile("after wrapper state change");
+    }
+
+    private void handleWrapperHeartbeat(WrapperSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+
+        if (pluginGateway == null) {
+            return;
+        }
+
+        pluginGateway.publishWrapperHeartbeat(snapshot);
     }
 
     private void requestMinimumReconcile(String reason) {

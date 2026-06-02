@@ -204,6 +204,47 @@ public final class NodeVersionStorage {
         }
     }
 
+
+    public List<String> availableSoftware() {
+        return manifestRepository.availableSoftware();
+    }
+
+    public int refreshManifests() {
+        return manifestRepository.refreshFromIndex();
+    }
+
+    public URI manifestSource(String software) {
+        validateSoftware(software);
+        return manifestRepository.resolve(software);
+    }
+
+    public SoftwareManifest manifest(String software) {
+        validateSoftware(software);
+
+        try {
+            return manifestClient.fetch(manifestRepository.resolve(software));
+        } catch (Exception exception) {
+            LOGGER.error("Failed to fetch manifest for " + software + ": " + exception.getMessage(), exception);
+            throw new RuntimeException("Failed to fetch manifest for " + software, exception);
+        }
+    }
+
+    public List<String> availableVersions(String software) {
+        SoftwareManifest manifest = manifest(software);
+        return manifest.versions().keySet().stream().sorted(Comparator.reverseOrder()).toList();
+    }
+
+    public Optional<SoftwareVersion> manifestVersion(String software, String version) {
+        validateSoftware(software);
+        validateVersion(version);
+
+        try {
+            return Optional.of(manifest(software).resolve(version));
+        } catch (Exception exception) {
+            return Optional.empty();
+        }
+    }
+
     public Path rootDirectory() {
         return rootDirectory;
     }

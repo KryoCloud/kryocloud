@@ -1,7 +1,9 @@
 package eu.kryocloud.network;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.channel.KryoChannelInitializer;
 import eu.kryocloud.network.connection.KryoConnection;
+import eu.kryocloud.network.connection.ProtocolSide;
 import eu.kryocloud.network.packet.Packet;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -19,6 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class KryoProtocolServer implements AutoCloseable {
+
+    private static final KryoLogger LOGGER = KryoLogger.logger("Protocol");
 
     private final String host;
     private final int port;
@@ -68,7 +72,7 @@ public final class KryoProtocolServer implements AutoCloseable {
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
                         .childOption(ChannelOption.TCP_NODELAY, true)
-                        .childHandler(new KryoChannelInitializer(this::registerConnection, this::unregisterConnection));
+                        .childHandler(new KryoChannelInitializer(ProtocolSide.SERVER, this::registerConnection, this::unregisterConnection));
 
                 ChannelFuture future = bootstrap.bind(new InetSocketAddress(host, port)).sync();
 
@@ -77,7 +81,7 @@ public final class KryoProtocolServer implements AutoCloseable {
                 serverChannel = future.channel();
                 running.set(true);
 
-                System.out.println("KryoProtocolServer listening on " + host + ":" + port);
+                LOGGER.success("Listening on " + host + ":" + port);
             } catch (InterruptedException exception) {
                 shutdownGroups(newBossGroup, newWorkerGroup);
                 Thread.currentThread().interrupt();
@@ -112,32 +116,14 @@ public final class KryoProtocolServer implements AutoCloseable {
         return Set.copyOf(connections);
     }
 
-    public void broadcast(Packet packet) {
+    public void send(Packet packet) {
         if (packet == null) {
             throw new IllegalArgumentException("packet must not be null");
         }
 
         for (KryoConnection connection : connections) {
-            if (connection.isActive()) {
-                connection.send(packet);
-            }
+            connection.send(packet);
         }
-    }
-
-    private void registerConnection(KryoConnection connection) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection must not be null");
-        }
-
-        connections.add(connection);
-    }
-
-    private void unregisterConnection(KryoConnection connection) {
-        if (connection == null) {
-            return;
-        }
-
-        connections.remove(connection);
     }
 
     @Override
@@ -150,27 +136,31 @@ public final class KryoProtocolServer implements AutoCloseable {
             }
 
             Channel channel = serverChannel;
-            EventLoopGroup boss = bossGroup;
-            EventLoopGroup worker = workerGroup;
-
-            serverChannel = null;
-            bossGroup = null;
-            workerGroup = null;
-
-            for (KryoConnection connection : connections) {
-                connection.close();
-            }
-
-            connections.clear();
 
             if (channel != null) {
                 channel.close().syncUninterruptibly();
             }
 
-            shutdownGroups(boss, worker);
+            for (KryoConnection connection : connections) {
+                connection.close();
+            }
+
+            serverChannel = null;
+            connections.clear();
+            shutdownGroups(bossGroup, workerGroup);
+            bossGroup = null;
+            workerGroup = null;
         } finally {
             lifecycleLock.unlock();
         }
+    }
+
+    private void registerConnection(KryoConnection connection) {
+        connections.add(connection);
+    }
+
+    private void unregisterConnection(KryoConnection connection) {
+        connections.remove(connection);
     }
 
     private void shutdownGroups(EventLoopGroup boss, EventLoopGroup worker) {

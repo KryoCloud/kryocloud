@@ -59,8 +59,8 @@ public final class GroupConfig extends Config {
     @Comment("Start new service at usage percent")
     private int startNewPercent = 80;
 
-    @Comment("First service port")
-    private int basePort = 25565;
+    @Comment("Proxy port, or 0 to assign random backend ports")
+    private int basePort = 0;
 
     @Comment("Use persistent service directory instead of temporary template copy")
     private boolean staticServices = false;
@@ -70,7 +70,7 @@ public final class GroupConfig extends Config {
     }
 
     public CloudGroup toGroup() {
-        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), requireNonBlank(bindAddress, "bindAddress"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, basePort, staticServices, installOnStart);
+        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), requireNonBlank(bindAddress, "bindAddress"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, effectiveBasePort(), staticServices, installOnStart);
     }
 
     public String getSoftware() {
@@ -175,6 +175,14 @@ public final class GroupConfig extends Config {
 
     public void setStaticServices(boolean staticServices) {
         this.staticServices = staticServices;
+    }
+
+    private int effectiveBasePort() {
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            return basePort < 1 ? 25565 : basePort;
+        }
+
+        return 0;
     }
 
     private ServiceType parseServiceType(String value) {

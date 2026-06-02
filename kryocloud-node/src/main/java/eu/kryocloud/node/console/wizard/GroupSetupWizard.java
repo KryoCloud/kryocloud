@@ -6,6 +6,7 @@ import eu.kryocloud.node.config.network.NetworkAddressConfig;
 import eu.kryocloud.node.console.ConsoleContext;
 import eu.kryocloud.node.version.VersionInstallResult;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class GroupSetupWizard {
@@ -22,8 +23,10 @@ public final class GroupSetupWizard {
         String serviceType = askServiceType(context);
         boolean staticServices = context.confirm("Use persistent static service directory?", defaultStatic(serviceType));
         String bindAddress = askBindAddress(context, serviceType);
-        String software = context.ask("Minecraft software:", defaultSoftware(serviceType));
-        String softwareVersion = context.ask("Minecraft version:", "latest");
+        printAvailableSoftware(context);
+        String software = askSoftware(context, serviceType);
+        printAvailableVersions(context, software);
+        String softwareVersion = askSoftwareVersion(context, software);
         boolean installOnStart = context.confirm("Install and materialize software automatically before start?", true);
         int serviceCount = askPositiveInt(context, "Default service count:", 1);
         int minCount = askNonNegativeInt(context, "Minimum online services:", serviceCount);
@@ -32,7 +35,7 @@ public final class GroupSetupWizard {
         int maxMemory = askAtLeast(context, "Maximum memory in MB:", defaultMaxMemory(serviceType), minMemory);
         int maxPlayers = askPositiveInt(context, "Maximum players:", 100);
         int startNewPercent = askPercent(context, "Start new service at percent:", 80);
-        int basePort = askPort(context, "Base port:", defaultPort(serviceType));
+        int basePort = askBasePort(context, serviceType);
         boolean installNow = context.confirm("Install and materialize software now?", true);
 
         GroupConfig config = context.node().groupManager().createConfig(groupName);
@@ -64,6 +67,7 @@ public final class GroupSetupWizard {
         context.print("  Software: " + config.getSoftware() + " " + config.getSoftwareVersion());
         context.print("  Bind: " + config.getBindAddress());
         context.print("  Static: " + config.isStaticServices());
+        context.print("  Port strategy: " + portStrategy(group.basePort()));
         context.print("  Minimum services: " + group.minCount());
 
         if (group.minCount() > 0) {
@@ -90,6 +94,31 @@ public final class GroupSetupWizard {
         context.success("Materialized template " + config.getTemplateName());
     }
 
+    private void printAvailableSoftware(ConsoleContext context) {
+        List<String> software = context.node().versionStorage().availableSoftware();
+
+        if (software.isEmpty()) {
+            return;
+        }
+
+        context.print("  Available software: " + String.join(", ", software));
+    }
+
+    private void printAvailableVersions(ConsoleContext context, String software) {
+        try {
+            List<String> versions = context.node().versionStorage().availableVersions(software);
+
+            if (versions.isEmpty()) {
+                return;
+            }
+
+            context.print("  Latest: " + versions.getFirst());
+            context.print("  Versions: " + String.join(", ", versions.stream().limit(8).toList()));
+        } catch (Exception exception) {
+            context.warn("Could not fetch versions for " + software + ": " + exception.getMessage());
+        }
+    }
+
     private String askName(ConsoleContext context) {
         String groupName = context.ask("Group name:", "Lobby");
 
@@ -102,7 +131,7 @@ public final class GroupSetupWizard {
 
     private String askServiceType(ConsoleContext context) {
         while (true) {
-            String input = context.ask("Service type SERVER/PROXY/LOBBY:", "LOBBY").toUpperCase();
+            String input = context.ask("Service type SERVER/PROXY/LOBBY:", "LOBBY", List.of("SERVER", "PROXY", "LOBBY")).toUpperCase();
 
             if ("SERVER".equals(input)) {
                 return "SERVER";
@@ -123,36 +152,58 @@ public final class GroupSetupWizard {
     private String askBindAddress(ConsoleContext context, String serviceType) {
         NetworkAddressConfig networkConfig = context.node().networkAddressConfig();
         String fallback = networkConfig.defaultFor(serviceType);
-
-        if ("PROXY".equalsIgnoreCase(serviceType)) {
-            context.info("Proxy groups should bind to a public address.");
-        }
-
-        if (!"PROXY".equalsIgnoreCase(serviceType)) {
-            context.info("Backend server groups should bind to a local/private address.");
-        }
-
         List<String> addresses = networkConfig.addressesFor(serviceType);
 
-        if (!addresses.isEmpty()) {
-            context.print("  Available: " + String.join(", ", addresses));
-        }
-
-        if (!context.confirm("Use different bind IP?", false)) {
-            return fallback;
-        }
-
-        String address = context.ask("Bind IP:", fallback);
-
         if ("PROXY".equalsIgnoreCase(serviceType)) {
+            context.info("Proxy groups bind to a public address because players connect to proxies directly.");
+            String address = context.ask("Proxy public bind IP:", fallback, addresses);
             networkConfig.addProxyAddress(address);
             networkConfig.save();
             return address;
         }
 
+        context.info("Backend server groups bind to local/private addresses. Proxy addons will register them later.");
+        if (!addresses.isEmpty()) {
+            context.print("  Available local addresses: " + String.join(", ", addresses));
+        }
+
+        if (!context.confirm("Use different local bind IP?", false)) {
+            return fallback;
+        }
+
+        String address = context.ask("Backend local bind IP:", fallback, addresses);
         networkConfig.addServerAddress(address);
         networkConfig.save();
         return address;
+    }
+
+    private String askSoftware(ConsoleContext context, String serviceType) {
+        List<String> software = context.node().versionStorage().availableSoftware();
+        return context.ask("Minecraft software:", defaultSoftware(context, serviceType), software);
+    }
+
+    private String askSoftwareVersion(ConsoleContext context, String software) {
+        List<String> candidates = versionCandidates(context, software);
+        return context.ask("Minecraft version:", "latest", candidates);
+    }
+
+    private List<String> versionCandidates(ConsoleContext context, String software) {
+        List<String> versions = new ArrayList<>();
+        versions.add("latest");
+
+        try {
+            for (String version : context.node().versionStorage().availableVersions(software)) {
+                if (versions.stream().anyMatch(entry -> entry.equalsIgnoreCase(version))) {
+                    continue;
+                }
+
+                versions.add(version);
+            }
+        } catch (Exception exception) {
+            return versions;
+        }
+
+        return List.copyOf(versions);
     }
 
     private boolean defaultStatic(String serviceType) {
@@ -163,20 +214,43 @@ public final class GroupSetupWizard {
         return false;
     }
 
-    private String defaultSoftware(String serviceType) {
-        if ("PROXY".equals(serviceType)) {
+    private String defaultSoftware(ConsoleContext context, String serviceType) {
+        List<String> software = context.node().versionStorage().availableSoftware();
+
+        if ("PROXY".equals(serviceType) && software.stream().anyMatch(entry -> entry.equalsIgnoreCase("velocity"))) {
+            return "velocity";
+        }
+
+        if ("PROXY".equals(serviceType) && software.stream().anyMatch(entry -> entry.equalsIgnoreCase("flamecord"))) {
             return "flamecord";
+        }
+
+        if (software.stream().anyMatch(entry -> entry.equalsIgnoreCase("paper"))) {
+            return "paper";
+        }
+
+        if (!software.isEmpty()) {
+            return software.getFirst();
         }
 
         return "paper";
     }
 
-    private int defaultPort(String serviceType) {
+    private int askBasePort(ConsoleContext context, String serviceType) {
         if ("PROXY".equals(serviceType)) {
-            return 25565;
+            return askPort(context, "Proxy public port:", 25565);
         }
 
-        return 25565;
+        context.info("Backend ports are assigned randomly at service start.");
+        return 0;
+    }
+
+    private String portStrategy(int basePort) {
+        if (basePort < 1) {
+            return "random backend port";
+        }
+
+        return "fixed proxy port " + basePort;
     }
 
     private int defaultMinMemory(String serviceType) {

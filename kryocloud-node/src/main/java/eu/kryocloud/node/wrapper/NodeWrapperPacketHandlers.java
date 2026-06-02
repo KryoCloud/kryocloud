@@ -15,26 +15,45 @@ import java.util.function.Consumer;
 public final class NodeWrapperPacketHandlers implements AutoCloseable {
 
     private final NodeWrapperRegistry wrapperRegistry;
-    private final Consumer<WrapperSnapshot> wrapperAvailableAction;
+    private final Consumer<WrapperSnapshot> wrapperRegisteredAction;
+    private final Consumer<WrapperSnapshot> wrapperStateAction;
+    private final Consumer<WrapperSnapshot> wrapperHeartbeatAction;
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
     public NodeWrapperPacketHandlers(NodeWrapperRegistry wrapperRegistry) {
         this(wrapperRegistry, ignored -> {
+        }, ignored -> {
+        }, ignored -> {
         });
     }
 
     public NodeWrapperPacketHandlers(NodeWrapperRegistry wrapperRegistry, Consumer<WrapperSnapshot> wrapperAvailableAction) {
+        this(wrapperRegistry, wrapperAvailableAction, wrapperAvailableAction, ignored -> {
+        });
+    }
+
+    public NodeWrapperPacketHandlers(NodeWrapperRegistry wrapperRegistry, Consumer<WrapperSnapshot> wrapperRegisteredAction, Consumer<WrapperSnapshot> wrapperStateAction, Consumer<WrapperSnapshot> wrapperHeartbeatAction) {
         if (wrapperRegistry == null) {
             throw new IllegalArgumentException("wrapperRegistry must not be null");
         }
 
-        if (wrapperAvailableAction == null) {
-            throw new IllegalArgumentException("wrapperAvailableAction must not be null");
+        if (wrapperRegisteredAction == null) {
+            throw new IllegalArgumentException("wrapperRegisteredAction must not be null");
+        }
+
+        if (wrapperStateAction == null) {
+            throw new IllegalArgumentException("wrapperStateAction must not be null");
+        }
+
+        if (wrapperHeartbeatAction == null) {
+            throw new IllegalArgumentException("wrapperHeartbeatAction must not be null");
         }
 
         this.wrapperRegistry = wrapperRegistry;
-        this.wrapperAvailableAction = wrapperAvailableAction;
+        this.wrapperRegisteredAction = wrapperRegisteredAction;
+        this.wrapperStateAction = wrapperStateAction;
+        this.wrapperHeartbeatAction = wrapperHeartbeatAction;
     }
 
     public void register() {
@@ -53,7 +72,7 @@ public final class NodeWrapperPacketHandlers implements AutoCloseable {
         }
 
         WrapperSnapshot snapshot = wrapperRegistry.register(context.connection(), packet);
-        wrapperAvailableAction.accept(snapshot);
+        wrapperRegisteredAction.accept(snapshot);
     }
 
     private void handleWrapperHeartbeat(PacketContext context, WrapperHeartbeatPacket packet) {
@@ -62,7 +81,8 @@ public final class NodeWrapperPacketHandlers implements AutoCloseable {
             return;
         }
 
-        wrapperRegistry.heartbeat(context.connection(), packet).ifPresent(wrapperAvailableAction);
+        wrapperRegistry.heartbeat(context.connection(), packet).ifPresent(wrapperStateAction);
+        wrapperRegistry.wrapper(packet.wrapperId()).ifPresent(wrapperHeartbeatAction);
     }
 
     private boolean isWrapperConnection(PacketContext context) {

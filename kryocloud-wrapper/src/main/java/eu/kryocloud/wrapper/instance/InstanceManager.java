@@ -26,6 +26,7 @@ import eu.kryocloud.wrapper.instance.runtime.JavaRuntimeResolver;
 import eu.kryocloud.wrapper.instance.workspace.InstanceCleanupResult;
 import eu.kryocloud.wrapper.instance.workspace.InstanceWorkspace;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,6 +49,8 @@ public final class InstanceManager implements IInstanceManager {
     private final String cloudName;
     private final String wrapperId;
     private final String advertisedAddress;
+    private final String pluginApiHost;
+    private final int pluginApiPort;
     private final IScreenManager screenManager;
     private final InstanceWorkspace workspace;
     private final JavaRuntimeResolver javaRuntimeResolver;
@@ -61,7 +64,7 @@ public final class InstanceManager implements IInstanceManager {
     private final ConcurrentMap<String, InstanceSnapshot> snapshots = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, KryoConnection> nodeConnections = new ConcurrentHashMap<>();
 
-    public InstanceManager(String cloudName, String wrapperId, String advertisedAddress, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, int startupProbeSeconds, int shutdownTimeoutSeconds) {
+    public InstanceManager(String cloudName, String wrapperId, String advertisedAddress, String pluginApiHost, int pluginApiPort, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, int startupProbeSeconds, int shutdownTimeoutSeconds) {
         if (cloudName == null || cloudName.isBlank()) {
             throw new IllegalArgumentException("cloudName must not be blank");
         }
@@ -76,6 +79,14 @@ public final class InstanceManager implements IInstanceManager {
 
         if (advertisedAddress == null || advertisedAddress.isBlank()) {
             throw new IllegalArgumentException("advertisedAddress must not be blank");
+        }
+
+        if (pluginApiHost == null || pluginApiHost.isBlank()) {
+            throw new IllegalArgumentException("pluginApiHost must not be blank");
+        }
+
+        if (pluginApiPort < 1 || pluginApiPort > 65_535) {
+            throw new IllegalArgumentException("pluginApiPort must be between 1 and 65535");
         }
 
         if (screenManager == null) {
@@ -101,6 +112,8 @@ public final class InstanceManager implements IInstanceManager {
         this.cloudName = cloudName;
         this.wrapperId = wrapperId;
         this.advertisedAddress = advertisedAddress;
+        this.pluginApiHost = pluginApiHost;
+        this.pluginApiPort = pluginApiPort;
         this.screenManager = screenManager;
         this.workspace = workspace;
         this.javaRuntimeResolver = javaRuntimeResolver;
@@ -199,6 +212,7 @@ public final class InstanceManager implements IInstanceManager {
         try {
             workingDirectory = workspace.prepare(packet);
             JavaRuntime javaRuntime = javaRuntimeResolver.resolve(workspace.javaVersion(workingDirectory), workspace.javaFlags(workingDirectory));
+            writeServiceIdentity(packet, workingDirectory);
             sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft instance with Java " + javaRuntime.majorVersion());
 
             String screenSession = screenSessionName(packet);
@@ -536,12 +550,60 @@ public final class InstanceManager implements IInstanceManager {
     private List<String> finalJvmArgs(ServiceStartRequestPacket packet, List<String> javaFlags) {
         List<String> arguments = new ArrayList<>(javaFlags);
         arguments.add("-Dkryocloud.service.id=" + packet.serviceId());
+        arguments.add("-Dkryocloud.service.name=" + packet.serviceId());
+        arguments.add("-Dkryocloud.service.group=" + packet.groupName());
         arguments.add("-Dkryocloud.group=" + packet.groupName());
+        arguments.add("-Dkryocloud.service.type=" + packet.serviceType());
+        arguments.add("-Dkryocloud.service.template=" + packet.templateName());
         arguments.add("-Dkryocloud.template=" + packet.templateName());
+        arguments.add("-Dkryocloud.service.static=" + packet.staticService());
         arguments.add("-Dkryocloud.static=" + packet.staticService());
+        arguments.add("-Dkryocloud.service.port=" + packet.port());
+        arguments.add("-Dkryocloud.service.bind.address=" + packet.bindAddress());
         arguments.add("-Dkryocloud.bind.address=" + packet.bindAddress());
+        arguments.add("-Dkryocloud.wrapper.id=" + wrapperId);
+        arguments.add("-Dkryocloud.api.host=" + pluginApiHost);
+        arguments.add("-Dkryocloud.api.port=" + pluginApiPort);
+        arguments.add("-Dkryocloud.plugin.host=" + pluginApiHost);
+        arguments.add("-Dkryocloud.plugin.port=" + pluginApiPort);
         arguments.add("-Dserver.ip=" + packet.bindAddress());
         return List.copyOf(arguments);
+    }
+
+
+    private void writeServiceIdentity(ServiceStartRequestPacket packet, Path workingDirectory) throws Exception {
+        Path directory = workingDirectory.resolve(".kryocloud");
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve("service.json"), serviceIdentityJson(packet));
+    }
+
+    private String serviceIdentityJson(ServiceStartRequestPacket packet) {
+        return "{\n"
+                + "  \"id\": \"" + json(packet.serviceId()) + "\",\n"
+                + "  \"name\": \"" + json(packet.serviceId()) + "\",\n"
+                + "  \"group\": \"" + json(packet.groupName()) + "\",\n"
+                + "  \"type\": \"" + json(packet.serviceType()) + "\",\n"
+                + "  \"template\": \"" + json(packet.templateName()) + "\",\n"
+                + "  \"wrapper\": \"" + json(wrapperId) + "\",\n"
+                + "  \"apiHost\": \"" + json(pluginApiHost) + "\",\n"
+                + "  \"apiPort\": " + pluginApiPort + ",\n"
+                + "  \"bindAddress\": \"" + json(packet.bindAddress()) + "\",\n"
+                + "  \"port\": " + packet.port() + ",\n"
+                + "  \"static\": " + packet.staticService() + "\n"
+                + "}\n";
+    }
+
+    private String json(Object value) {
+        if (value == null) {
+            return "";
+        }
+
+        return String.valueOf(value)
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+                .replace("\t", "\\t");
     }
 
     private void stopSnapshot(String serviceId, InstanceSnapshot snapshot, boolean force) {

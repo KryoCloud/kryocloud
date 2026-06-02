@@ -8,10 +8,12 @@ import eu.kryocloud.node.console.tui.Tone;
 import org.jline.reader.LineReader;
 import org.jline.terminal.Terminal;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader, AtomicBoolean running) {
+public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader, AtomicBoolean running, KryoCompleter completer) {
 
     public ConsoleContext {
         if (node == null) {
@@ -28,6 +30,10 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
 
         if (running == null) {
             throw new IllegalArgumentException("running must not be null");
+        }
+
+        if (completer == null) {
+            throw new IllegalArgumentException("completer must not be null");
         }
     }
 
@@ -86,11 +92,19 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
         return answer;
     }
 
+    public String ask(String question, String fallback, Collection<String> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return ask(question, fallback);
+        }
+
+        return completer.withPromptCandidates(candidates, () -> ask(question, fallback));
+    }
+
     public boolean confirm(String question, boolean fallback) {
         String fallbackText = fallback ? "Y/n" : "y/N";
 
         while (true) {
-            String answer = ask(question + " " + muted("(" + fallbackText + ")"), fallback ? "y" : "n");
+            String answer = ask(question + " " + muted("(" + fallbackText + ")"), fallback ? "y" : "n", List.of("y", "j", "yes", "ja", "n", "no", "nein"));
             String normalized = answer.toLowerCase(Locale.ROOT);
 
             if ("y".equals(normalized) || "yes".equals(normalized) || "j".equals(normalized) || "ja".equals(normalized)) {
@@ -116,7 +130,6 @@ public record ConsoleContext(KryoNode node, Terminal terminal, LineReader reader
     public String accent(String value) {
         return Tone.PRIMARY.paint(value);
     }
-
 
     public String good(String value) {
         return Tone.SUCCESS.paint(value);

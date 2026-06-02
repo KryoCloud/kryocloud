@@ -1,7 +1,9 @@
 package eu.kryocloud.network;
 
+import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.auth.AuthManager;
 import eu.kryocloud.network.connection.KryoConnection;
+import eu.kryocloud.network.connection.ProtocolSide;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
 import eu.kryocloud.network.packet.bus.PacketContext;
 import eu.kryocloud.network.packet.type.AuthPacket;
@@ -16,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class KryoProtocolHandlers {
 
+    private static final KryoLogger LOGGER = KryoLogger.logger("Protocol");
     private static final AtomicBoolean DEFAULTS_REGISTERED = new AtomicBoolean(false);
 
     private KryoProtocolHandlers() {
@@ -33,10 +36,16 @@ public final class KryoProtocolHandlers {
     }
 
     private static void handleHandshake(PacketContext context, HandshakePacket packet) {
+        if (context.connection().side() != ProtocolSide.SERVER) {
+            context.connection().close();
+            return;
+        }
+
         HandshakeStatus status = validateHandshake(packet);
 
         if (status != HandshakeStatus.ACCEPTED) {
             context.reply(HandshakeResponsePacket.rejected(status, KryoProtocol.NODE_IDENTITY)).addListener(ChannelFutureListener.CLOSE);
+            LOGGER.warn("Handshake rejected for " + safeIdentity(packet.identity()) + ": " + status);
             return;
         }
 
@@ -44,20 +53,25 @@ public final class KryoProtocolHandlers {
         connection.markAuthenticated(packet.peerType(), packet.identity(), packet.protocolVersion());
         context.reply(HandshakeResponsePacket.accepted(KryoProtocol.NODE_IDENTITY));
 
-        System.out.println("Accepted Kryo handshake: " + connection);
+        LOGGER.debug("Accepted handshake from " + packet.identity() + " using protocol " + packet.protocolVersion());
     }
 
     private static void handleHandshakeResponse(PacketContext context, HandshakeResponsePacket packet) {
         KryoConnection connection = context.connection();
 
+        if (connection.side() != ProtocolSide.CLIENT) {
+            connection.close();
+            return;
+        }
+
         if (!packet.accepted()) {
-            System.out.println("Kryo handshake rejected by " + packet.remoteIdentity() + ": " + packet.status());
+            LOGGER.warn("Handshake rejected by " + packet.remoteIdentity() + ": " + packet.status());
             connection.close();
             return;
         }
 
         connection.markAuthenticated(PeerType.NODE, packet.remoteIdentity(), packet.protocolVersion());
-        System.out.println("Kryo handshake accepted by " + packet.remoteIdentity() + " using protocol " + packet.protocolVersion());
+        LOGGER.debug("Handshake accepted by " + packet.remoteIdentity() + " using protocol " + packet.protocolVersion());
     }
 
     private static void handleHeartbeat(PacketContext context, HeartbeatPacket packet) {
@@ -65,13 +79,18 @@ public final class KryoProtocolHandlers {
     }
 
     private static void handleLegacyAuth(PacketContext context, AuthPacket packet) {
+        if (context.connection().side() != ProtocolSide.SERVER) {
+            context.connection().close();
+            return;
+        }
+
         if (!AuthManager.validate(packet.token())) {
             context.connection().close();
             return;
         }
 
         context.connection().markAuthenticated(PeerType.WRAPPER, "legacy-peer", KryoProtocol.VERSION);
-        System.out.println("Authenticated legacy Kryo protocol connection: " + context.connection().id());
+        LOGGER.debug("Authenticated legacy protocol connection " + context.connection().id());
     }
 
     private static HandshakeStatus validateHandshake(HandshakePacket packet) {
@@ -92,5 +111,13 @@ public final class KryoProtocolHandlers {
         }
 
         return HandshakeStatus.ACCEPTED;
+    }
+
+    private static String safeIdentity(String identity) {
+        if (identity == null || identity.isBlank()) {
+            return "unknown";
+        }
+
+        return identity;
     }
 }

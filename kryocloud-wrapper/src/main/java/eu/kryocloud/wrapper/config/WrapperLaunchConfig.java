@@ -31,6 +31,12 @@ public final class WrapperLaunchConfig extends Config {
     @Comment("Directory containing managed Java runtimes. Relative paths are resolved from the KryoCloud data directory.")
     private String javaRuntimesDirectory = ".jdk";
 
+    @Comment("Local host used by Minecraft plugins to connect to the KryoCloud plugin API")
+    private String pluginApiHost = "127.0.0.1";
+
+    @Comment("Local port used by Minecraft plugins to connect to the KryoCloud plugin API")
+    private int pluginApiPort = 7070;
+
     @Comment("Seconds the wrapper waits for Minecraft readiness log output before marking a service as RUNNING")
     private int startupProbeSeconds = 90;
 
@@ -99,6 +105,22 @@ public final class WrapperLaunchConfig extends Config {
 
     public String getJavaRuntimesDirectory() {
         return javaRuntimesDirectory;
+    }
+
+    public String getPluginApiHost() {
+        return pluginApiHost;
+    }
+
+    public void setPluginApiHost(String pluginApiHost) {
+        this.pluginApiHost = pluginApiHost;
+    }
+
+    public int getPluginApiPort() {
+        return pluginApiPort;
+    }
+
+    public void setPluginApiPort(int pluginApiPort) {
+        this.pluginApiPort = pluginApiPort;
     }
 
     public void setJavaRuntimesDirectory(String javaRuntimesDirectory) {

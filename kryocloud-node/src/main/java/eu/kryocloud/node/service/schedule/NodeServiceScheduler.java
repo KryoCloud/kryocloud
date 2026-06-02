@@ -14,21 +14,27 @@ import eu.kryocloud.node.version.NodeVersionStorage;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class NodeServiceScheduler {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("Scheduler");
+    private static final int RANDOM_PORT_MIN = 20_000;
+    private static final int RANDOM_PORT_MAX = 60_000;
 
     private final NodeWrapperRegistry wrapperRegistry;
     private final IGroupManager groupManager;
     private final NodeServiceRegistry serviceRegistry;
     private final NodeVersionStorage versionStorage;
+    private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean reconciling = new AtomicBoolean(false);
 
     public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeServiceRegistry serviceRegistry, NodeVersionStorage versionStorage) {
@@ -229,10 +235,13 @@ public final class NodeServiceScheduler {
 
     private List<ServiceStartPlan> plansFromGroup(IGroup group, int count) {
         List<ServiceStartPlan> plans = new ArrayList<>();
+        Set<Integer> reservedPorts = reservedPorts();
 
         for (int index = 0; index < count; index++) {
             int serviceNumber = nextFreeServiceNumber(group, plans);
-            plans.add(planFromGroup(group, serviceNumber));
+            ServiceStartPlan plan = planFromGroup(group, serviceNumber, reservedPorts);
+            plans.add(plan);
+            reservedPorts.add(plan.port());
         }
 
         return List.copyOf(plans);
@@ -256,9 +265,39 @@ public final class NodeServiceScheduler {
         throw new IllegalStateException("No free service slot available for group " + group.name());
     }
 
-    private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber) {
-        int port = group.basePort() + serviceNumber - 1;
+    private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber, Set<Integer> reservedPorts) {
+        int port = portFor(group, serviceNumber, reservedPorts);
         return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), group.bindAddress(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices());
+    }
+
+    private int portFor(IGroup group, int serviceNumber, Set<Integer> reservedPorts) {
+        if (group.basePort() > 0) {
+            return group.basePort() + serviceNumber - 1;
+        }
+
+        return randomBackendPort(reservedPorts);
+    }
+
+    private int randomBackendPort(Set<Integer> reservedPorts) {
+        for (int attempt = 0; attempt < 256; attempt++) {
+            int port = RANDOM_PORT_MIN + random.nextInt(RANDOM_PORT_MAX - RANDOM_PORT_MIN + 1);
+
+            if (!reservedPorts.contains(port)) {
+                return port;
+            }
+        }
+
+        throw new IllegalStateException("No free random backend port could be reserved");
+    }
+
+    private Set<Integer> reservedPorts() {
+        Set<Integer> reserved = new HashSet<>();
+
+        for (NodeServiceSnapshot service : serviceRegistry.services()) {
+            reserved.add(service.port());
+        }
+
+        return reserved;
     }
 
     private CloudServiceType mapType(ServiceType type) {

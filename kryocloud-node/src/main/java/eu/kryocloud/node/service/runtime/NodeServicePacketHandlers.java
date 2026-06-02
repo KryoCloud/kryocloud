@@ -14,21 +14,29 @@ import eu.kryocloud.network.protocol.PeerType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public final class NodeServicePacketHandlers implements AutoCloseable {
 
     private final NodeServiceRegistry serviceRegistry;
-    private final Consumer<NodeServiceSnapshot> stateAction;
+    private final BiConsumer<NodeServiceSnapshot, NodeServiceSnapshot> stateAction;
+    private final Consumer<NodeServiceSnapshot> metricsAction;
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
     public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry) {
-        this(serviceRegistry, snapshot -> {
+        this(serviceRegistry, (previous, current) -> {
+        }, snapshot -> {
         });
     }
 
-    public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry, Consumer<NodeServiceSnapshot> stateAction) {
+    public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry, BiConsumer<NodeServiceSnapshot, NodeServiceSnapshot> stateAction) {
+        this(serviceRegistry, stateAction, snapshot -> {
+        });
+    }
+
+    public NodeServicePacketHandlers(NodeServiceRegistry serviceRegistry, BiConsumer<NodeServiceSnapshot, NodeServiceSnapshot> stateAction, Consumer<NodeServiceSnapshot> metricsAction) {
         if (serviceRegistry == null) {
             throw new IllegalArgumentException("serviceRegistry must not be null");
         }
@@ -37,8 +45,13 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
             throw new IllegalArgumentException("stateAction must not be null");
         }
 
+        if (metricsAction == null) {
+            throw new IllegalArgumentException("metricsAction must not be null");
+        }
+
         this.serviceRegistry = serviceRegistry;
         this.stateAction = stateAction;
+        this.metricsAction = metricsAction;
     }
 
     public void register() {
@@ -72,10 +85,11 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
             return;
         }
 
+        NodeServiceSnapshot previous = serviceRegistry.service(packet.serviceId()).orElse(null);
         NodeServiceSnapshot snapshot = serviceRegistry.update(packet);
         String message = snapshot.message() == null || snapshot.message().isBlank() ? "" : TextColor.hex("#8B949E").apply(" — " + snapshot.message());
         context.printState(TextColor.hex("#5EEAD4").apply("Service " + snapshot.serviceId()) + " is now " + stateColor(snapshot.state().name()) + " on " + snapshot.wrapperId() + message);
-        stateAction.accept(snapshot);
+        stateAction.accept(previous, snapshot);
     }
 
     private void handleCommandResponse(PacketContext context, ServiceCommandResponsePacket packet) {
@@ -117,7 +131,7 @@ public final class NodeServicePacketHandlers implements AutoCloseable {
             return;
         }
 
-        serviceRegistry.updateMetrics(packet);
+        serviceRegistry.updateMetrics(packet).ifPresent(metricsAction);
     }
 
     private void handleCleanupResponse(PacketContext context, ServiceCleanupResponsePacket packet) {
