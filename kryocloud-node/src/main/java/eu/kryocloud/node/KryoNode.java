@@ -31,6 +31,7 @@ import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
 import eu.kryocloud.node.template.TemplateManager;
 import eu.kryocloud.node.version.NodeVersionStorage;
 import eu.kryocloud.node.plugin.NodePluginGateway;
+import eu.kryocloud.node.forwarding.NodeForwardingSecretStore;
 import eu.kryocloud.node.wrapper.NodeWrapperPacketHandlers;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
@@ -100,7 +101,7 @@ public class KryoNode implements INode {
 
             wrapperRegistry = new NodeWrapperRegistry();
             serviceRegistry = new NodeServiceRegistry();
-            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage);
+            serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage, new NodeForwardingSecretStore());
             pluginGateway = new NodePluginGateway(wrapperRegistry, serviceRegistry, serviceScheduler, groupManager, templateManager, versionStorage, networkAddressConfig);
             pluginGateway.register();
 

@@ -8,7 +8,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public record CloudGroup(UUID uniqueId, String name, String javaVersion, String templateName, String software, String softwareVersion, String bindAddress, ServiceType serviceType, Collection<IService> services, int serviceCount, int minCount, int maxCount, int minMemory, int maxMemory, int maxPlayers, int startNewPercent, int basePort, boolean staticServices, boolean installOnStart) implements IGroup {
+public record CloudGroup(UUID uniqueId, String name, String javaVersion, String templateName, String software, String softwareVersion, String bindAddress, String onlineMode, String forwardingMode, ServiceType serviceType, Collection<IService> services, int serviceCount, int minCount, int maxCount, int minMemory, int maxMemory, int maxPlayers, int startNewPercent, int basePort, boolean staticServices, boolean installOnStart) implements IGroup {
 
     public CloudGroup {
         if (uniqueId == null) {
@@ -37,6 +37,14 @@ public record CloudGroup(UUID uniqueId, String name, String javaVersion, String 
 
         if (bindAddress == null || bindAddress.isBlank()) {
             throw new IllegalArgumentException("bindAddress must not be blank");
+        }
+
+        if (onlineMode == null || onlineMode.isBlank()) {
+            throw new IllegalArgumentException("onlineMode must not be blank");
+        }
+
+        if (forwardingMode == null || forwardingMode.isBlank()) {
+            throw new IllegalArgumentException("forwardingMode must not be blank");
         }
 
         if (serviceType == null) {

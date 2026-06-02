@@ -23,10 +23,13 @@ public final class GroupSetupWizard {
         String serviceType = askServiceType(context);
         boolean staticServices = context.confirm("Use persistent static service directory?", defaultStatic(serviceType));
         String bindAddress = askBindAddress(context, serviceType);
+        String onlineMode = askOnlineMode(context, serviceType);
+        String forwardingMode = askForwardingMode(context, serviceType);
         printAvailableSoftware(context);
         String software = askSoftware(context, serviceType);
         printAvailableVersions(context, software);
         String softwareVersion = askSoftwareVersion(context, software);
+        String javaVersion = askJavaVersion(context, software, softwareVersion);
         boolean installOnStart = context.confirm("Install and materialize software automatically before start?", true);
         int serviceCount = askPositiveInt(context, "Default service count:", 1);
         int minCount = askNonNegativeInt(context, "Minimum online services:", serviceCount);
@@ -44,8 +47,11 @@ public final class GroupSetupWizard {
         config.setServiceType(serviceType);
         config.setStaticServices(staticServices);
         config.setBindAddress(bindAddress);
+        config.setOnlineMode(onlineMode);
+        config.setForwardingMode(forwardingMode);
         config.setSoftware(software);
         config.setSoftwareVersion(softwareVersion);
+        config.setJavaVersion(javaVersion);
         config.setInstallOnStart(installOnStart);
         config.setServiceCount(serviceCount);
         config.setMinCount(minCount);
@@ -65,7 +71,10 @@ public final class GroupSetupWizard {
         context.success("Created Minecraft group " + group.name());
         context.print("  Template: " + config.getTemplateName());
         context.print("  Software: " + config.getSoftware() + " " + config.getSoftwareVersion());
+        context.print("  Java: " + config.getJavaVersion());
         context.print("  Bind: " + config.getBindAddress());
+        context.print("  Online mode: " + config.getOnlineMode());
+        context.print("  Forwarding: " + config.getForwardingMode());
         context.print("  Static: " + config.isStaticServices());
         context.print("  Port strategy: " + portStrategy(group.basePort()));
         context.print("  Minimum services: " + group.minCount());
@@ -177,6 +186,27 @@ public final class GroupSetupWizard {
         return address;
     }
 
+
+    private String askOnlineMode(ConsoleContext context, String serviceType) {
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            context.info("Proxy groups stay in online-mode. Backend groups use AUTO by default.");
+            return "TRUE";
+        }
+
+        context.info("AUTO means online-mode=true without proxy groups and online-mode=false with proxy groups.");
+        return context.ask("Online mode AUTO/TRUE/FALSE:", "AUTO", List.of("AUTO", "TRUE", "FALSE"));
+    }
+
+    private String askForwardingMode(ConsoleContext context, String serviceType) {
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            context.info("AUTO resolves the proxy forwarding mode from the selected proxy software.");
+            return context.ask("Forwarding mode AUTO/VELOCITY/BUNGEECORD/NONE:", "AUTO", List.of("AUTO", "VELOCITY", "BUNGEECORD", "NONE"));
+        }
+
+        context.info("Backend groups should usually keep forwarding AUTO so KryoCloud can match the proxy mode.");
+        return context.ask("Forwarding mode AUTO/VELOCITY/BUNGEECORD/NONE:", "AUTO", List.of("AUTO", "VELOCITY", "BUNGEECORD", "NONE"));
+    }
+
     private String askSoftware(ConsoleContext context, String serviceType) {
         List<String> software = context.node().versionStorage().availableSoftware();
         return context.ask("Minecraft software:", defaultSoftware(context, serviceType), software);
@@ -185,6 +215,38 @@ public final class GroupSetupWizard {
     private String askSoftwareVersion(ConsoleContext context, String software) {
         List<String> candidates = versionCandidates(context, software);
         return context.ask("Minecraft version:", "latest", candidates);
+    }
+
+    private String askJavaVersion(ConsoleContext context, String software, String softwareVersion) {
+        String manifestJava = manifestJavaVersion(context, software, softwareVersion);
+        List<String> candidates = new ArrayList<>();
+        candidates.add("java");
+        addCandidate(candidates, manifestJava);
+        addCandidate(candidates, "21");
+        addCandidate(candidates, "25");
+
+        context.info("Use java for the manifest/template runtime, or enter a major version like 21/25 to force it.");
+        return context.ask("Java runtime:", "java", candidates);
+    }
+
+    private String manifestJavaVersion(ConsoleContext context, String software, String softwareVersion) {
+        try {
+            return String.valueOf(context.node().versionStorage().manifestVersion(software, softwareVersion).orElseThrow().javaVersion());
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    private void addCandidate(List<String> candidates, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+
+        if (candidates.stream().anyMatch(candidate -> candidate.equalsIgnoreCase(value))) {
+            return;
+        }
+
+        candidates.add(value);
     }
 
     private List<String> versionCandidates(ConsoleContext context, String software) {

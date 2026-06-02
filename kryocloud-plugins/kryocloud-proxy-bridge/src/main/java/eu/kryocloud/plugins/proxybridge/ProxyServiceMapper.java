@@ -36,6 +36,17 @@ public final class ProxyServiceMapper {
         return host(service).isPresent();
     }
 
+
+    public static String groupAlias(String groupName) {
+        String alias = clean(groupName).toLowerCase(Locale.ROOT);
+
+        if (alias.isBlank()) {
+            return "";
+        }
+
+        return alias.replaceAll("[^a-z0-9_.-]", "-").replaceAll("-+", "-").replaceAll("^-|-$", "");
+    }
+
     public static Optional<ProxyRegistration> registration(CloudServiceSnapshot service) {
         if (!registerable(service)) {
             return Optional.empty();

@@ -125,7 +125,10 @@ public final class GroupsCommand implements ConsoleCommand {
         context.row("Type", group.serviceType().name());
         context.row("Template", group.templateName());
         context.row("Software", group.software() + " " + group.softwareVersion());
+        context.row("Java", group.javaVersion());
         context.row("Bind IP", group.bindAddress());
+        context.row("Online mode", group.onlineMode());
+        context.row("Forwarding", group.forwardingMode());
         context.row("Services", context.node().serviceRegistry().activeServiceCount(group.name()) + " active / " + group.minCount() + " minimum / " + group.maxCount() + " maximum");
         context.row("Memory", group.minMemory() + "-" + group.maxMemory() + "MB");
         context.row("Port strategy", portStrategy(group.basePort()));

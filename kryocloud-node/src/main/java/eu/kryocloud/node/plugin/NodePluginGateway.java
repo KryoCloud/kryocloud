@@ -693,7 +693,9 @@ public final class NodePluginGateway implements AutoCloseable {
                 "Max online: " + group.maxCount(),
                 "Memory: " + group.maxMemory() + "MB",
                 "Template: " + group.templateName(),
-                "Version: " + group.softwareVersion()
+                "Version: " + group.softwareVersion(),
+                "Online mode: " + group.onlineMode(),
+                "Forwarding: " + group.forwardingMode()
         ));
     }
 
@@ -1444,10 +1446,10 @@ public final class NodePluginGateway implements AutoCloseable {
 
     private Map<String, String> groupPayload(IGroup group) {
         if (group == null) {
-            return Map.of("group", "unknown", "type", "UNKNOWN", "minOnline", "0", "maxOnline", "0", "memoryMb", "0", "template", "", "version", "");
+            return Map.of("group", "unknown", "type", "UNKNOWN", "minOnline", "0", "maxOnline", "0", "memoryMb", "0", "template", "", "version", "", "onlineMode", "AUTO", "forwardingMode", "AUTO");
         }
 
-        return Map.of("group", group.name(), "type", group.serviceType().name(), "minOnline", String.valueOf(group.minCount()), "maxOnline", String.valueOf(group.maxCount()), "memoryMb", String.valueOf(group.maxMemory()), "template", group.templateName(), "version", group.softwareVersion());
+        return Map.of("group", group.name(), "type", group.serviceType().name(), "minOnline", String.valueOf(group.minCount()), "maxOnline", String.valueOf(group.maxCount()), "memoryMb", String.valueOf(group.maxMemory()), "template", group.templateName(), "version", group.softwareVersion(), "onlineMode", group.onlineMode(), "forwardingMode", group.forwardingMode());
     }
 
     private Map<String, String> wrapperPayload(WrapperSnapshot wrapper) {

@@ -15,8 +15,12 @@ import eu.kryocloud.plugins.proxybridge.command.CloudCommandBridge;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,7 +28,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ProxyBridgeCore {
 
     private final ProxyPlatform platform;
-    private final Map<String, ProxyRegistration> registered = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ProxyRegistration> registered = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ProxyRegistration> aliases = new ConcurrentHashMap<>();
     private final Set<String> managed = ConcurrentHashMap.newKeySet();
     private final Collection<IEventSubscription> subscriptions = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean active = new AtomicBoolean();
@@ -149,8 +154,10 @@ public final class ProxyBridgeCore {
                 continue;
             }
 
-            unregister(serviceName);
+            unregister(serviceName, false);
         }
+
+        refreshAliases();
     }
 
     private void update(CloudServiceSnapshot service) {
@@ -177,9 +184,28 @@ public final class ProxyBridgeCore {
         registered.put(registration.name(), registration);
         managed.add(registration.name());
         platform.info("Registered cloud service " + registration.name() + " -> " + registration.host() + ":" + registration.port());
+
+        refreshAliases();
+    }
+
+    private void registerAlias(String alias, ProxyRegistration target) {
+        ProxyRegistration registration = new ProxyRegistration(alias, target.groupName(), target.host(), target.port());
+        ProxyRegistration existing = aliases.get(alias);
+
+        if (registration.sameAddress(existing)) {
+            return;
+        }
+
+        platform.register(registration);
+        aliases.put(alias, registration);
+        platform.info("Registered cloud group alias " + alias + " -> " + target.name() + " (" + target.host() + ":" + target.port() + ")");
     }
 
     private void unregister(String serviceName) {
+        unregister(serviceName, true);
+    }
+
+    private void unregister(String serviceName, boolean refreshAliases) {
         if (serviceName == null || serviceName.isBlank()) {
             return;
         }
@@ -193,11 +219,59 @@ public final class ProxyBridgeCore {
 
         platform.unregister(serviceName);
         platform.info("Unregistered cloud service " + serviceName);
+
+        if (refreshAliases) {
+            refreshAliases();
+        }
+    }
+
+    private void refreshAliases() {
+        Map<String, ProxyRegistration> activeAliases = new HashMap<>();
+
+        for (ProxyRegistration registration : registered.values()) {
+            String alias = ProxyServiceMapper.groupAlias(registration.groupName());
+
+            if (alias.isBlank()) {
+                continue;
+            }
+
+            Optional<ProxyRegistration> existing = Optional.ofNullable(activeAliases.get(alias));
+
+            if (existing.isPresent() && serviceComparator().compare(existing.get(), registration) <= 0) {
+                continue;
+            }
+
+            activeAliases.put(alias, registration);
+        }
+
+        for (Map.Entry<String, ProxyRegistration> entry : activeAliases.entrySet()) {
+            registerAlias(entry.getKey(), entry.getValue());
+        }
+
+        for (String alias : new ArrayList<>(aliases.keySet())) {
+            if (activeAliases.containsKey(alias)) {
+                continue;
+            }
+
+            aliases.remove(alias);
+            platform.unregister(alias);
+            platform.info("Unregistered cloud group alias " + alias);
+        }
+    }
+
+    private Comparator<ProxyRegistration> serviceComparator() {
+        return Comparator.comparing(ProxyRegistration::name, String.CASE_INSENSITIVE_ORDER);
     }
 
     private void unregisterAll() {
+        for (String alias : new ArrayList<>(aliases.keySet())) {
+            aliases.remove(alias);
+            platform.unregister(alias);
+            platform.info("Unregistered cloud group alias " + alias);
+        }
+
         for (String serviceName : new ArrayList<>(managed)) {
-            unregister(serviceName);
+            unregister(serviceName, false);
         }
     }
 

@@ -17,7 +17,7 @@ public final class GroupConfig extends Config {
     @Comment("Group name")
     private String name = "Lobby";
 
-    @Comment("Java executable or version identifier")
+    @Comment("Java runtime: java/auto uses the manifest or template version, 21/25 forces that Java major version, paths can point to a Java executable or JDK directory")
     private String javaVersion = "java";
 
     @Comment("Template used for services of this group")
@@ -34,6 +34,12 @@ public final class GroupConfig extends Config {
 
     @Comment("IP address this group should bind Minecraft services to")
     private String bindAddress = "127.0.0.1";
+
+    @Comment("Online mode: AUTO keeps backend services online when no proxy groups exist and offline behind proxies, TRUE forces online-mode=true, FALSE forces online-mode=false")
+    private String onlineMode = "AUTO";
+
+    @Comment("Proxy forwarding mode: AUTO resolves from proxy software, VELOCITY uses modern forwarding with the shared cloud secret, BUNGEECORD uses legacy forwarding, NONE disables forwarding")
+    private String forwardingMode = "AUTO";
 
     @Comment("Install and materialize software automatically before group start")
     private boolean installOnStart = true;
@@ -70,7 +76,7 @@ public final class GroupConfig extends Config {
     }
 
     public CloudGroup toGroup() {
-        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), requireNonBlank(bindAddress, "bindAddress"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, effectiveBasePort(), staticServices, installOnStart);
+        return new CloudGroup(UUID.fromString(requireNonBlank(uniqueId, "uniqueId")), requireNonBlank(name, "name"), requireNonBlank(javaVersion, "javaVersion"), requireNonBlank(templateName, "templateName"), requireNonBlank(software, "software"), requireNonBlank(softwareVersion, "softwareVersion"), requireNonBlank(bindAddress, "bindAddress"), requireNonBlank(onlineMode, "onlineMode"), requireNonBlank(forwardingMode, "forwardingMode"), parseServiceType(serviceType), List.of(), serviceCount, minCount, maxCount, minMemory, maxMemory, maxPlayers, startNewPercent, effectiveBasePort(), staticServices, installOnStart);
     }
 
     public String getSoftware() {
@@ -83,6 +89,14 @@ public final class GroupConfig extends Config {
 
     public String getBindAddress() {
         return bindAddress;
+    }
+
+    public String getOnlineMode() {
+        return onlineMode;
+    }
+
+    public String getForwardingMode() {
+        return forwardingMode;
     }
 
     public boolean isInstallOnStart() {
@@ -107,6 +121,10 @@ public final class GroupConfig extends Config {
 
     public String getTemplateName() {
         return templateName;
+    }
+
+    public String getJavaVersion() {
+        return javaVersion;
     }
 
     public void setName(String name) {
@@ -135,6 +153,14 @@ public final class GroupConfig extends Config {
 
     public void setBindAddress(String bindAddress) {
         this.bindAddress = bindAddress;
+    }
+
+    public void setOnlineMode(String onlineMode) {
+        this.onlineMode = onlineMode;
+    }
+
+    public void setForwardingMode(String forwardingMode) {
+        this.forwardingMode = forwardingMode;
     }
 
     public void setInstallOnStart(boolean installOnStart) {

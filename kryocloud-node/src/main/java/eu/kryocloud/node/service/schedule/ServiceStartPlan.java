@@ -2,7 +2,7 @@ package eu.kryocloud.node.service.schedule;
 
 import eu.kryocloud.network.protocol.CloudServiceType;
 
-public record ServiceStartPlan(String serviceId, String groupName, String templateName, String bindAddress, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService) {
+public record ServiceStartPlan(String serviceId, String groupName, String templateName, String javaVersion, String bindAddress, CloudServiceType serviceType, int port, int maxMemoryMb, boolean staticService, boolean onlineMode, String forwardingMode, String forwardingSecret) {
 
     public ServiceStartPlan {
         if (serviceId == null || serviceId.isBlank()) {
@@ -15,6 +15,10 @@ public record ServiceStartPlan(String serviceId, String groupName, String templa
 
         if (templateName == null || templateName.isBlank()) {
             throw new IllegalArgumentException("templateName must not be blank");
+        }
+
+        if (javaVersion == null || javaVersion.isBlank()) {
+            throw new IllegalArgumentException("javaVersion must not be blank");
         }
 
         if (bindAddress == null || bindAddress.isBlank()) {
@@ -31,6 +35,14 @@ public record ServiceStartPlan(String serviceId, String groupName, String templa
 
         if (maxMemoryMb < 1) {
             throw new IllegalArgumentException("maxMemoryMb must be greater than 0");
+        }
+
+        if (forwardingMode == null || forwardingMode.isBlank()) {
+            forwardingMode = "NONE";
+        }
+
+        if (forwardingSecret == null) {
+            forwardingSecret = "";
         }
     }
 }

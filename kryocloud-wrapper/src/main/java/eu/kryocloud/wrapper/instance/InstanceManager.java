@@ -211,8 +211,8 @@ public final class InstanceManager implements IInstanceManager {
 
         try {
             workingDirectory = workspace.prepare(packet);
-            JavaRuntime javaRuntime = javaRuntimeResolver.resolve(workspace.javaVersion(workingDirectory), workspace.javaFlags(workingDirectory));
-            writeServiceIdentity(packet, workingDirectory);
+            JavaRuntime javaRuntime = javaRuntimeResolver.resolve(packet.javaVersion(), workspace.javaVersion(workingDirectory), workspace.javaFlags(workingDirectory));
+            writeServiceIdentity(packet, workingDirectory, javaRuntime);
             sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft instance with Java " + javaRuntime.majorVersion());
 
             String screenSession = screenSessionName(packet);
@@ -556,9 +556,13 @@ public final class InstanceManager implements IInstanceManager {
         arguments.add("-Dkryocloud.service.type=" + packet.serviceType());
         arguments.add("-Dkryocloud.service.template=" + packet.templateName());
         arguments.add("-Dkryocloud.template=" + packet.templateName());
+        arguments.add("-Dkryocloud.java.version=" + packet.javaVersion());
         arguments.add("-Dkryocloud.service.static=" + packet.staticService());
         arguments.add("-Dkryocloud.static=" + packet.staticService());
         arguments.add("-Dkryocloud.service.port=" + packet.port());
+        arguments.add("-Dkryocloud.service.online-mode=" + packet.onlineMode());
+        arguments.add("-Dkryocloud.service.forwarding.mode=" + packet.forwardingMode());
+        arguments.add("-Dkryocloud.service.forwarding.enabled=" + packet.forwardingEnabled());
         arguments.add("-Dkryocloud.service.bind.address=" + packet.bindAddress());
         arguments.add("-Dkryocloud.bind.address=" + packet.bindAddress());
         arguments.add("-Dkryocloud.wrapper.id=" + wrapperId);
@@ -571,24 +575,29 @@ public final class InstanceManager implements IInstanceManager {
     }
 
 
-    private void writeServiceIdentity(ServiceStartRequestPacket packet, Path workingDirectory) throws Exception {
+    private void writeServiceIdentity(ServiceStartRequestPacket packet, Path workingDirectory, JavaRuntime javaRuntime) throws Exception {
         Path directory = workingDirectory.resolve(".kryocloud");
         Files.createDirectories(directory);
-        Files.writeString(directory.resolve("service.json"), serviceIdentityJson(packet));
+        Files.writeString(directory.resolve("service.json"), serviceIdentityJson(packet, javaRuntime));
     }
 
-    private String serviceIdentityJson(ServiceStartRequestPacket packet) {
+    private String serviceIdentityJson(ServiceStartRequestPacket packet, JavaRuntime javaRuntime) {
         return "{\n"
                 + "  \"id\": \"" + json(packet.serviceId()) + "\",\n"
                 + "  \"name\": \"" + json(packet.serviceId()) + "\",\n"
                 + "  \"group\": \"" + json(packet.groupName()) + "\",\n"
                 + "  \"type\": \"" + json(packet.serviceType()) + "\",\n"
                 + "  \"template\": \"" + json(packet.templateName()) + "\",\n"
+                + "  \"javaVersion\": \"" + json(packet.javaVersion()) + "\",\n"
+                + "  \"javaRuntime\": " + javaRuntime.majorVersion() + ",\n"
                 + "  \"wrapper\": \"" + json(wrapperId) + "\",\n"
                 + "  \"apiHost\": \"" + json(pluginApiHost) + "\",\n"
                 + "  \"apiPort\": " + pluginApiPort + ",\n"
                 + "  \"bindAddress\": \"" + json(packet.bindAddress()) + "\",\n"
                 + "  \"port\": " + packet.port() + ",\n"
+                + "  \"onlineMode\": " + packet.onlineMode() + ",\n"
+                + "  \"forwardingMode\": \"" + json(packet.forwardingMode()) + "\",\n"
+                + "  \"forwardingEnabled\": " + packet.forwardingEnabled() + ",\n"
                 + "  \"static\": " + packet.staticService() + "\n"
                 + "}\n";
     }

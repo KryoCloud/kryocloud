@@ -22,6 +22,10 @@ public interface IGroup {
 
     String bindAddress();
 
+    String onlineMode();
+
+    String forwardingMode();
+
     ServiceType serviceType();
 
     Collection<IService> services();

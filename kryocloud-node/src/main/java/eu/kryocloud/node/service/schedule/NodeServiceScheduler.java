@@ -11,15 +11,20 @@ import eu.kryocloud.network.protocol.CloudServiceType;
 import eu.kryocloud.node.service.runtime.NodeServiceRegistry;
 import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.version.NodeVersionStorage;
+import eu.kryocloud.node.forwarding.ForwardingMode;
+import eu.kryocloud.node.forwarding.GroupOnlineMode;
+import eu.kryocloud.node.forwarding.NodeForwardingSecretStore;
 import eu.kryocloud.node.wrapper.NodeWrapperRegistry;
 import eu.kryocloud.node.wrapper.WrapperSnapshot;
 
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,10 +39,11 @@ public final class NodeServiceScheduler {
     private final IGroupManager groupManager;
     private final NodeServiceRegistry serviceRegistry;
     private final NodeVersionStorage versionStorage;
+    private final NodeForwardingSecretStore forwardingSecretStore;
     private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean reconciling = new AtomicBoolean(false);
 
-    public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeServiceRegistry serviceRegistry, NodeVersionStorage versionStorage) {
+    public NodeServiceScheduler(NodeWrapperRegistry wrapperRegistry, IGroupManager groupManager, NodeServiceRegistry serviceRegistry, NodeVersionStorage versionStorage, NodeForwardingSecretStore forwardingSecretStore) {
         if (wrapperRegistry == null) {
             throw new IllegalArgumentException("wrapperRegistry must not be null");
         }
@@ -54,10 +60,15 @@ public final class NodeServiceScheduler {
             throw new IllegalArgumentException("versionStorage must not be null");
         }
 
+        if (forwardingSecretStore == null) {
+            throw new IllegalArgumentException("forwardingSecretStore must not be null");
+        }
+
         this.wrapperRegistry = wrapperRegistry;
         this.groupManager = groupManager;
         this.serviceRegistry = serviceRegistry;
         this.versionStorage = versionStorage;
+        this.forwardingSecretStore = forwardingSecretStore;
     }
 
     public ServiceStartResult start(ServiceStartPlan plan) {
@@ -79,7 +90,7 @@ public final class NodeServiceScheduler {
         }
 
         UUID requestId = UUID.randomUUID();
-        optionalConnection.get().send(new ServiceStartRequestPacket(requestId, plan.serviceId(), plan.groupName(), plan.templateName(), plan.bindAddress(), plan.serviceType(), plan.port(), plan.maxMemoryMb(), plan.staticService()));
+        optionalConnection.get().send(new ServiceStartRequestPacket(requestId, plan.serviceId(), plan.groupName(), plan.templateName(), plan.javaVersion(), plan.bindAddress(), plan.serviceType(), plan.port(), plan.maxMemoryMb(), plan.staticService(), plan.onlineMode(), plan.forwardingMode(), plan.forwardingSecret()));
 
         return new ServiceStartResult(requestId, plan.serviceId(), wrapper.wrapperId());
     }
@@ -117,7 +128,7 @@ public final class NodeServiceScheduler {
         try {
             List<ServiceStartResult> results = new ArrayList<>();
 
-            for (IGroup group : groupManager.groups()) {
+            for (IGroup group : sortedForStartup(groupManager.groups())) {
                 results.addAll(reconcileGroup(group.name()));
             }
 
@@ -267,7 +278,84 @@ public final class NodeServiceScheduler {
 
     private ServiceStartPlan planFromGroup(IGroup group, int serviceNumber, Set<Integer> reservedPorts) {
         int port = portFor(group, serviceNumber, reservedPorts);
-        return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), group.bindAddress(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices());
+        ForwardingMode forwardingMode = forwardingMode(group);
+        boolean onlineMode = onlineMode(group, forwardingMode);
+
+        if (group.serviceType() != ServiceType.PROXY && onlineMode) {
+            forwardingMode = ForwardingMode.NONE;
+        }
+
+        String forwardingSecret = forwardingMode == ForwardingMode.NONE ? "" : forwardingSecretStore.secret();
+
+        return new ServiceStartPlan(group.name() + "-" + serviceNumber, group.name(), group.templateName(), group.javaVersion(), group.bindAddress(), mapType(group.serviceType()), port, group.maxMemory(), group.staticServices(), onlineMode, forwardingMode.name(), forwardingSecret);
+    }
+
+    private List<IGroup> sortedForStartup(Collection<IGroup> groups) {
+        return groups.stream()
+                .sorted(Comparator.comparingInt(this::startupPriority).thenComparing(IGroup::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    private int startupPriority(IGroup group) {
+        if (group.serviceType() == ServiceType.PROXY) {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    private boolean onlineMode(IGroup group, ForwardingMode forwardingMode) {
+        if (group.serviceType() == ServiceType.PROXY) {
+            return true;
+        }
+
+        GroupOnlineMode configured = GroupOnlineMode.parse(group.onlineMode());
+
+        if (configured == GroupOnlineMode.TRUE) {
+            return true;
+        }
+
+        if (configured == GroupOnlineMode.FALSE) {
+            return false;
+        }
+
+        return forwardingMode == ForwardingMode.NONE;
+    }
+
+    private ForwardingMode forwardingMode(IGroup group) {
+        if (group.serviceType() == ServiceType.PROXY) {
+            return forwardingModeForProxy(group);
+        }
+
+        if (explicitForwardingNone(group.forwardingMode())) {
+            return ForwardingMode.NONE;
+        }
+
+        ForwardingMode configured = ForwardingMode.parse(group.forwardingMode());
+
+        if (configured != ForwardingMode.NONE) {
+            return configured;
+        }
+
+        return ForwardingMode.resolveFromProxyGroups(groupManager.groups());
+    }
+
+    private ForwardingMode forwardingModeForProxy(IGroup group) {
+        if (explicitForwardingNone(group.forwardingMode())) {
+            return ForwardingMode.NONE;
+        }
+
+        ForwardingMode configured = ForwardingMode.parse(group.forwardingMode());
+
+        if (configured != ForwardingMode.NONE) {
+            return configured;
+        }
+
+        return ForwardingMode.resolveForProxySoftware(group.software());
+    }
+
+    private boolean explicitForwardingNone(String value) {
+        return value != null && value.trim().equalsIgnoreCase("NONE");
     }
 
     private int portFor(IGroup group, int serviceNumber, Set<Integer> reservedPorts) {

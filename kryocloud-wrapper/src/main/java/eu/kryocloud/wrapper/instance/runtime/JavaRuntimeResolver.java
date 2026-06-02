@@ -38,6 +38,30 @@ public final class JavaRuntimeResolver {
         this.installer = new TemurinJavaInstaller(runtimeDirectory, Duration.ofMinutes(10));
     }
 
+    public JavaRuntime resolve(String javaIdentifier, int templateMajorVersion, List<String> requestedFlags) {
+        if (templateMajorVersion < 1) {
+            throw new IllegalArgumentException("templateMajorVersion must be greater than 0");
+        }
+
+        if (requestedFlags == null) {
+            throw new IllegalArgumentException("requestedFlags must not be null");
+        }
+
+        String identifier = javaIdentifier == null ? "" : javaIdentifier.trim();
+
+        if (identifier.isBlank() || automaticIdentifier(identifier)) {
+            return resolve(templateMajorVersion, requestedFlags);
+        }
+
+        Integer majorVersion = majorIdentifier(identifier);
+
+        if (majorVersion != null) {
+            return resolve(majorVersion, requestedFlags);
+        }
+
+        return executable(identifier, requestedFlags);
+    }
+
     public JavaRuntime resolve(int requiredMajorVersion, List<String> requestedFlags) {
         if (requiredMajorVersion < 1) {
             throw new IllegalArgumentException("requiredMajorVersion must be greater than 0");
@@ -77,6 +101,18 @@ public final class JavaRuntimeResolver {
         throw new IllegalStateException("No exact Java " + requiredMajorVersion + " runtime found. KryoCloud tried managed Temurin under " + runtimeDirectory + " and exact-version environment candidates.");
     }
 
+    private JavaRuntime executable(String identifier, List<String> requestedFlags) {
+        String executable = executableFromIdentifier(identifier);
+        int majorVersion = probeMajorVersion(executable);
+
+        if (majorVersion < 1) {
+            throw new IllegalStateException("Java runtime could not be probed: " + executable);
+        }
+
+        FlagProbeResult flags = sanitizeFlags(executable, requestedFlags);
+        return new JavaRuntime(executable, majorVersion, flags.acceptedFlags(), flags.rejectedFlags());
+    }
+
     private JavaRuntime runtime(String executable, int requiredMajorVersion, List<String> requestedFlags) {
         int majorVersion = probeMajorVersion(executable);
 
@@ -87,6 +123,45 @@ public final class JavaRuntimeResolver {
 
         FlagProbeResult flags = sanitizeFlags(executable, requestedFlags);
         return new JavaRuntime(executable, majorVersion, flags.acceptedFlags(), flags.rejectedFlags());
+    }
+
+    private boolean automaticIdentifier(String identifier) {
+        String normalized = identifier.toLowerCase(Locale.ROOT);
+        return normalized.equals("java") || normalized.equals("auto") || normalized.equals("default") || normalized.equals("manifest") || normalized.equals("template");
+    }
+
+    private Integer majorIdentifier(String identifier) {
+        if (identifier.isBlank()) {
+            return null;
+        }
+
+        for (char character : identifier.toCharArray()) {
+            if (!Character.isDigit(character)) {
+                return null;
+            }
+        }
+
+        int value = Integer.parseInt(identifier);
+
+        if (value < 1) {
+            throw new IllegalArgumentException("Java version must be greater than 0");
+        }
+
+        return value;
+    }
+
+    private String executableFromIdentifier(String identifier) {
+        Path path = Path.of(identifier);
+
+        if (Files.isDirectory(path)) {
+            Path executable = path.resolve("bin").resolve(executableName());
+
+            if (Files.exists(executable)) {
+                return executable.toAbsolutePath().toString();
+            }
+        }
+
+        return identifier;
     }
 
     private List<String> managedCandidates(int requiredMajorVersion) {

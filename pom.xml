@@ -1,30 +1,55 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>eu.kryocloud</groupId>
     <artifactId>kryocloud-parent</artifactId>
     <version>1.0.0-alpha.1</version>
-
     <packaging>pom</packaging>
+
+    <name>KryoCloud</name>
+
     <modules>
         <module>kryocloud-api</module>
-        <module>kryocloud-common</module>
-        <module>kryocloud-node</module>
-        <module>kryocloud-network</module>
-        <module>kryocloud-launcher</module>
         <module>kryocloud-plugin-api</module>
+        <module>kryocloud-common</module>
+        <module>kryocloud-network</module>
+        <module>kryocloud-node</module>
         <module>kryocloud-wrapper</module>
-        <module>kryocloud-plugins</module>
+        <module>kryocloud-launcher</module>
         <module>kryocloud-plugins</module>
     </modules>
 
     <properties>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
     </properties>
 
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.14.1</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.6.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>
