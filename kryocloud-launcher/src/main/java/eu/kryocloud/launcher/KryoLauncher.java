@@ -2,12 +2,17 @@ package eu.kryocloud.launcher;
 
 import eu.kryocloud.launcher.argument.LauncherArguments;
 import eu.kryocloud.launcher.argument.LauncherMode;
-import eu.kryocloud.node.KryoNode;
-import eu.kryocloud.wrapper.KryoWrapper;
+import eu.kryocloud.launcher.classpath.ClasspathLoader;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class KryoLauncher {
+
+    private static final String NODE_CLASS = "eu.kryocloud.node.KryoNode";
+    private static final String WRAPPER_CLASS = "eu.kryocloud.wrapper.KryoWrapper";
 
     private KryoLauncher() {
     }
@@ -30,58 +35,38 @@ public final class KryoLauncher {
     }
 
     private static void launch(LauncherMode mode) {
+        Path projectRoot = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        Path cache = projectRoot.resolve(".kryocloud").resolve("libs");
+        ClasspathLoader loader = new ClasspathLoader(projectRoot, cache, mode);
+        List<Object> instances = new ArrayList<>();
+        AtomicBoolean closed = new AtomicBoolean(false);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> close(loader, instances, closed), "kryocloud-launcher-shutdown"));
+
         switch (mode) {
-            case NODE -> launchNode();
-            case WRAPPER -> launchWrapper();
-            case ALL -> launchAll();
+            case NODE -> instances.add(loader.create(NODE_CLASS));
+            case WRAPPER -> instances.add(loader.create(WRAPPER_CLASS));
+            case ALL -> {
+                instances.add(loader.create(NODE_CLASS));
+                instances.add(loader.create(WRAPPER_CLASS));
+            }
         }
     }
 
-    private static void launchNode() {
-        KryoNode node = new KryoNode();
-        AtomicBoolean closed = new AtomicBoolean(false);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeNode(node, closed), "kryocloud-node-shutdown"));
-    }
-
-    private static void launchWrapper() {
-        KryoWrapper wrapper = new KryoWrapper();
-        AtomicBoolean closed = new AtomicBoolean(false);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeWrapper(wrapper, closed), "kryocloud-wrapper-shutdown"));
-    }
-
-    private static void launchAll() {
-        KryoNode node = new KryoNode();
-        KryoWrapper wrapper = new KryoWrapper();
-        AtomicBoolean closed = new AtomicBoolean(false);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeAll(node, wrapper, closed), "kryocloud-local-shutdown"));
-    }
-
-    private static void closeAll(KryoNode node, KryoWrapper wrapper, AtomicBoolean closed) {
+    private static void close(ClasspathLoader loader, List<Object> instances, AtomicBoolean closed) {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
 
-        wrapper.shutdown();
-        node.shutdown();
-    }
-
-    private static void closeNode(KryoNode node, AtomicBoolean closed) {
-        if (!closed.compareAndSet(false, true)) {
-            return;
+        for (int index = instances.size() - 1; index >= 0; index--) {
+            loader.shutdown(instances.get(index));
         }
 
-        node.shutdown();
-    }
-
-    private static void closeWrapper(KryoWrapper wrapper, AtomicBoolean closed) {
-        if (!closed.compareAndSet(false, true)) {
-            return;
+        try {
+            loader.close();
+        } catch (Exception exception) {
+            System.err.println("Failed to close launcher classpath: " + exception.getMessage());
         }
-
-        wrapper.shutdown();
     }
 
     private static void printHelp() {
@@ -93,7 +78,8 @@ public final class KryoLauncher {
         System.out.println("  java -jar kryocloud-launcher.jar wrapper");
         System.out.println("  java -jar kryocloud-launcher.jar all");
         System.out.println();
-        System.out.println("Default mode: node");
+        System.out.println("Default mode: all");
+        System.out.println("Dependency cache: .kryocloud/libs");
     }
 
 }

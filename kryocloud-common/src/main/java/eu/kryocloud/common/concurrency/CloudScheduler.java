@@ -215,27 +215,20 @@ public final class CloudScheduler implements AutoCloseable {
             error = t;
         }
 
-        boolean won;
         if (isCancellation) {
-            won = future.cancel(true);
+            future.cancel(true);
         }
+
         if (!isCancellation && error != null) {
-            won = future.completeExceptionally(error);
-            if (won) {
+            boolean completed = future.completeExceptionally(error);
+
+            if (completed) {
                 LOG.log(Level.WARNING, "Task failed: " + scheduledTask, error);
             }
         }
+
         if (!isCancellation && error == null) {
-            won = future.complete(value);
-        }
-        if (isCancellation) {
-            won = future.isCancelled();
-        }
-        if (!isCancellation && error != null) {
-            won = future.isCompletedExceptionally();
-        }
-        if (!isCancellation && error == null) {
-            won = future.isDone() && !future.isCompletedExceptionally();
+            future.complete(value);
         }
 
         boolean completionWon = scheduledTask.markCompleted();

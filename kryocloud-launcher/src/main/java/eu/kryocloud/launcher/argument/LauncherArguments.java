@@ -9,11 +9,11 @@ public record LauncherArguments(LauncherMode mode, boolean help) {
         List<String> values = args == null ? List.of() : Arrays.asList(args);
 
         if (values.isEmpty()) {
-            return new LauncherArguments(LauncherMode.NODE, false);
+            return new LauncherArguments(LauncherMode.ALL, false);
         }
 
         if (values.stream().anyMatch(LauncherArguments::isHelpArgument)) {
-            return new LauncherArguments(LauncherMode.NODE, true);
+            return new LauncherArguments(LauncherMode.ALL, true);
         }
 
         String mode = values.getFirst();

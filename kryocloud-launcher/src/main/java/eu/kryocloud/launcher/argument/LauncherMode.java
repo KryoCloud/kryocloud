@@ -10,7 +10,7 @@ public enum LauncherMode {
 
     public static LauncherMode parse(String value) {
         if (value == null || value.isBlank()) {
-            return NODE;
+            return ALL;
         }
 
         String normalized = value.trim().toLowerCase(Locale.ROOT);

@@ -5,6 +5,9 @@ import eu.kryocloud.api.database.IDatabaseProvider;
 import eu.kryocloud.api.node.INode;
 import eu.kryocloud.api.service.IServiceManager;
 import eu.kryocloud.common.config.ConfigProvider;
+import eu.kryocloud.common.concurrency.CloudScheduler;
+import eu.kryocloud.common.concurrency.TaskKind;
+import eu.kryocloud.common.concurrency.TaskPriority;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.ConsoleOutput;
 import eu.kryocloud.common.logging.KryoLogger;
@@ -63,6 +66,7 @@ public class KryoNode implements INode {
     private NodeServiceScheduler serviceScheduler;
     private NodeVersionStorage versionStorage;
     private NodePluginGateway pluginGateway;
+    private CloudScheduler scheduler;
     private NetworkAddressConfig networkAddressConfig;
     private KryoConsole console;
 
@@ -92,16 +96,17 @@ public class KryoNode implements INode {
             new CloudSetupWizard().run(launchConfig, securityConfig, wrapperSetupConfig, networkAddressConfig);
             AuthManager.registerToken(securityConfig.getToken());
 
+            scheduler = new CloudScheduler();
             databaseProvider = new DatabaseProvider();
             templateManager = new TemplateManager(configProvider);
             groupManager = new GroupManager(configProvider);
-            serviceManager = new ServiceManager();
-
             versionStorage = new NodeVersionStorage(KryoDirectoryLayout.VERSIONS, KryoDirectoryLayout.TEMPLATES, ManifestRepository.defaults(), Duration.ofSeconds(60));
 
             wrapperRegistry = new NodeWrapperRegistry();
             serviceRegistry = new NodeServiceRegistry();
             serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage, new NodeForwardingSecretStore());
+            serviceManager = new ServiceManager(groupManager, templateManager, serviceRegistry, serviceScheduler);
+            INode.initialize(this);
             pluginGateway = new NodePluginGateway(wrapperRegistry, serviceRegistry, serviceScheduler, groupManager, templateManager, versionStorage, networkAddressConfig);
             pluginGateway.register();
 
@@ -179,6 +184,11 @@ public class KryoNode implements INode {
 
         serviceScheduler = null;
         versionStorage = null;
+
+        if (scheduler != null) {
+            scheduler.close();
+            scheduler = null;
+        }
 
         if (configProvider != null) {
             configProvider.unregisterConfig(NetworkAddressConfig.class);
@@ -283,7 +293,7 @@ public class KryoNode implements INode {
             return;
         }
 
-        if (serviceScheduler == null) {
+        if (serviceScheduler == null || scheduler == null) {
             pendingMinimumReconcile.set(true);
             return;
         }
@@ -298,18 +308,28 @@ public class KryoNode implements INode {
             return;
         }
 
-        try {
-            pendingMinimumReconcile.set(false);
-            List<?> results = serviceScheduler.reconcileMinimumServices();
+        pendingMinimumReconcile.set(false);
+        scheduler.run(TaskKind.BLOCKING_IO, "node minimum reconcile", TaskPriority.HIGH, Duration.ofMinutes(5), () -> runMinimumReconcile(reason))
+                .future()
+                .whenComplete((ignored, error) -> finishMinimumReconcile(reason, error));
+    }
 
-            if (!results.isEmpty()) {
-                LOGGER.success("Auto-start requested " + results.size() + " Minecraft service(s) " + reason + ".");
-            }
-        } catch (Exception exception) {
-            LOGGER.warn("Auto-start reconciliation failed " + reason + ": " + exception.getMessage());
-        } finally {
-            reconcilingMinimumServices.set(false);
+    private void runMinimumReconcile(String reason) {
+        List<?> results = serviceScheduler.reconcileMinimumServices();
+
+        if (results.isEmpty()) {
+            return;
         }
+
+        LOGGER.success("Auto-start requested " + results.size() + " Minecraft service(s) " + reason + ".");
+    }
+
+    private void finishMinimumReconcile(String reason, Throwable error) {
+        if (error != null) {
+            LOGGER.warn("Auto-start reconciliation failed " + reason + ": " + error.getMessage());
+        }
+
+        reconcilingMinimumServices.set(false);
 
         if (pendingMinimumReconcile.getAndSet(false)) {
             requestMinimumReconcile("after queued startup event");

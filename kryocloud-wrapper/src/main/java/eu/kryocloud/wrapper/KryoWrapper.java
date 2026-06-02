@@ -4,6 +4,7 @@ import eu.kryocloud.api.config.IConfigProvider;
 import eu.kryocloud.api.screen.IScreenManager;
 import eu.kryocloud.api.wrapper.IWrapper;
 import eu.kryocloud.common.config.ConfigProvider;
+import eu.kryocloud.common.concurrency.CloudScheduler;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocolClient;
@@ -37,6 +38,7 @@ public final class KryoWrapper implements IWrapper {
     private InstancePacketHandlers instancePacketHandlers;
     private WrapperHeartbeatTask heartbeatTask;
     private WrapperPluginGatewayServer pluginGatewayServer;
+    private CloudScheduler scheduler;
     private ScheduledExecutorService heartbeatExecutor;
 
     public KryoWrapper() {
@@ -64,11 +66,12 @@ public final class KryoWrapper implements IWrapper {
             validatePositive(launchConfig.getStartupProbeSeconds(), "startupProbeSeconds");
             validatePositive(launchConfig.getShutdownTimeoutSeconds(), "shutdownTimeoutSeconds");
 
+            scheduler = new CloudScheduler();
             screenManager = new ScreenManager();
             InstanceWorkspace workspace = new InstanceWorkspace(KryoDirectoryLayout.TEMPLATES, KryoDirectoryLayout.TMP, KryoDirectoryLayout.STATIC, KryoDirectoryLayout.ADDONS);
             JavaRuntimeResolver javaRuntimeResolver = new JavaRuntimeResolver(javaRuntimesDirectory, Duration.ofSeconds(3));
             instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, launchConfig.getPluginApiPort(), screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
-            instancePacketHandlers = new InstancePacketHandlers(instanceManager);
+            instancePacketHandlers = new InstancePacketHandlers(instanceManager, scheduler);
             instancePacketHandlers.register();
 
             protocolClient = new KryoProtocolClient(nodeHost, launchConfig.getNodePort());
@@ -124,6 +127,11 @@ public final class KryoWrapper implements IWrapper {
         if (protocolClient != null) {
             protocolClient.close();
             protocolClient = null;
+        }
+
+        if (scheduler != null) {
+            scheduler.close();
+            scheduler = null;
         }
 
         screenManager = null;
