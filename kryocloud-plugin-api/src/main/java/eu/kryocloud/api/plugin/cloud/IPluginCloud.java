@@ -1,5 +1,6 @@
 package eu.kryocloud.api.plugin.cloud;
 
+import eu.kryocloud.api.plugin.cloud.controller.ICloudConsoleController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudGroupController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudMaintenanceController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudServiceController;
@@ -20,5 +21,7 @@ public interface IPluginCloud {
     ICloudVersionController versions();
 
     ICloudMaintenanceController maintenance();
+
+    ICloudConsoleController console();
 
 }

@@ -101,7 +101,7 @@ public class KryoNode implements INode {
             wrapperRegistry = new NodeWrapperRegistry();
             serviceRegistry = new NodeServiceRegistry();
             serviceScheduler = new NodeServiceScheduler(wrapperRegistry, groupManager, serviceRegistry, versionStorage);
-            pluginGateway = new NodePluginGateway(wrapperRegistry, serviceRegistry, serviceScheduler, groupManager, templateManager, versionStorage);
+            pluginGateway = new NodePluginGateway(wrapperRegistry, serviceRegistry, serviceScheduler, groupManager, templateManager, versionStorage, networkAddressConfig);
             pluginGateway.register();
 
             wrapperPacketHandlers = new NodeWrapperPacketHandlers(wrapperRegistry, this::handleWrapperRegistered, this::handleWrapperStateChanged, this::handleWrapperHeartbeat);

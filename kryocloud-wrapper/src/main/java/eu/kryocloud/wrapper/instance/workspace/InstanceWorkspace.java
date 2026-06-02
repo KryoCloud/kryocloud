@@ -2,6 +2,7 @@ package eu.kryocloud.wrapper.instance.workspace;
 
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
+import eu.kryocloud.network.protocol.CloudServiceType;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,8 +22,9 @@ public final class InstanceWorkspace {
     private final Path temporaryDirectory;
     private final Path staticDirectory;
     private final Path failedDirectory;
+    private final Path addonsDirectory;
 
-    public InstanceWorkspace(Path templatesDirectory, Path temporaryDirectory, Path staticDirectory) {
+    public InstanceWorkspace(Path templatesDirectory, Path temporaryDirectory, Path staticDirectory, Path addonsDirectory) {
         if (templatesDirectory == null) {
             throw new IllegalArgumentException("templatesDirectory must not be null");
         }
@@ -35,10 +37,15 @@ public final class InstanceWorkspace {
             throw new IllegalArgumentException("staticDirectory must not be null");
         }
 
+        if (addonsDirectory == null) {
+            throw new IllegalArgumentException("addonsDirectory must not be null");
+        }
+
         this.templatesDirectory = templatesDirectory;
         this.temporaryDirectory = temporaryDirectory;
         this.staticDirectory = staticDirectory;
         this.failedDirectory = temporaryDirectory.resolve("failed");
+        this.addonsDirectory = addonsDirectory;
     }
 
     public Path prepare(ServiceStartRequestPacket packet) throws IOException {
@@ -56,14 +63,49 @@ public final class InstanceWorkspace {
         if (packet.staticService()) {
             prepareStaticWorkspace(templateDirectory, workingDirectory);
             writeMinecraftFiles(packet, workingDirectory);
+            installDefaultProxyBridge(packet, workingDirectory);
             return workingDirectory;
         }
 
         prepareTemporaryWorkspace(templateDirectory, workingDirectory);
         writeMinecraftFiles(packet, workingDirectory);
+        installDefaultProxyBridge(packet, workingDirectory);
 
         return workingDirectory;
     }
+    private void installDefaultProxyBridge(ServiceStartRequestPacket packet, Path workingDirectory) throws IOException {
+        if (packet.serviceType() != CloudServiceType.PROXY) {
+            return;
+        }
+
+        Path source = defaultProxyBridgeJar();
+
+        if (source == null) {
+            LOGGER.warn("Proxy bridge plugin is missing. Expected addons/proxy/kryocloud-proxy-bridge.jar or addons/kryocloud-proxy-bridge.jar");
+            return;
+        }
+
+        Path pluginsDirectory = workingDirectory.resolve("plugins");
+        Files.createDirectories(pluginsDirectory);
+        Files.copy(source, pluginsDirectory.resolve("kryocloud-proxy-bridge.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private Path defaultProxyBridgeJar() {
+        Path proxyScoped = addonsDirectory.resolve("proxy").resolve("kryocloud-proxy-bridge.jar");
+
+        if (Files.exists(proxyScoped)) {
+            return proxyScoped;
+        }
+
+        Path flat = addonsDirectory.resolve("kryocloud-proxy-bridge.jar");
+
+        if (Files.exists(flat)) {
+            return flat;
+        }
+
+        return null;
+    }
+
 
     public boolean cleanupTemporary(ServiceStartRequestPacket packet, Path workingDirectory) {
         if (packet == null) {

@@ -1,0 +1,14 @@
+name: KryoCloudProxyBridge
+main: eu.kryocloud.plugins.proxybridge.bungee.BungeeCloudProxyPlugin
+version: 1.0.0-alpha.1
+author: KryoCloud
+description: Connects BungeeCord proxies with KryoCloud services
+commands:
+  cloud:
+    description: Controls KryoCloud from ingame
+    aliases:
+      - kryocloud
+permissions:
+  kryocloud.admin:
+    description: Allows using /cloud ingame
+    default: op

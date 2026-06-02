@@ -3,6 +3,7 @@ package eu.kryocloud.api.plugin;
 import eu.kryocloud.api.plugin.bootstrap.CloudPluginBootstrap;
 import eu.kryocloud.api.plugin.bootstrap.CloudPluginSession;
 import eu.kryocloud.api.plugin.cloud.IPluginCloud;
+import eu.kryocloud.api.plugin.cloud.controller.ICloudConsoleController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudGroupController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudMaintenanceController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudServiceController;
@@ -125,6 +126,10 @@ public final class CloudAPI {
 
     public static ICloudMaintenanceController maintenance() {
         return cloud().maintenance();
+    }
+
+    public static ICloudConsoleController console() {
+        return cloud().console();
     }
 
     public static IEventBus events() {

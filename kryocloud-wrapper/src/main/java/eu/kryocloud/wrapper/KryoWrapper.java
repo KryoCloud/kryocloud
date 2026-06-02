@@ -65,7 +65,7 @@ public final class KryoWrapper implements IWrapper {
             validatePositive(launchConfig.getShutdownTimeoutSeconds(), "shutdownTimeoutSeconds");
 
             screenManager = new ScreenManager();
-            InstanceWorkspace workspace = new InstanceWorkspace(KryoDirectoryLayout.TEMPLATES, KryoDirectoryLayout.TMP, KryoDirectoryLayout.STATIC);
+            InstanceWorkspace workspace = new InstanceWorkspace(KryoDirectoryLayout.TEMPLATES, KryoDirectoryLayout.TMP, KryoDirectoryLayout.STATIC, KryoDirectoryLayout.ADDONS);
             JavaRuntimeResolver javaRuntimeResolver = new JavaRuntimeResolver(javaRuntimesDirectory, Duration.ofSeconds(3));
             instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, launchConfig.getPluginApiPort(), screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
             instancePacketHandlers = new InstancePacketHandlers(instanceManager);

@@ -2,6 +2,9 @@ package eu.kryocloud.node.plugin;
 
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.api.template.ITemplate;
+import eu.kryocloud.common.layout.KryoDirectoryLayout;
+import eu.kryocloud.common.manifest.SoftwareManifest;
+import eu.kryocloud.common.manifest.SoftwareVersion;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
@@ -18,6 +21,7 @@ import eu.kryocloud.network.protocol.CloudServiceState;
 import eu.kryocloud.network.protocol.PeerType;
 import eu.kryocloud.network.protocol.WrapperState;
 import eu.kryocloud.node.config.group.GroupConfig;
+import eu.kryocloud.node.config.network.NetworkAddressConfig;
 import eu.kryocloud.node.group.GroupManager;
 import eu.kryocloud.node.service.runtime.NodeServiceSnapshot;
 import eu.kryocloud.node.service.schedule.NodeServiceScheduler;
@@ -30,6 +34,7 @@ import eu.kryocloud.node.wrapper.WrapperSnapshot;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,17 +52,19 @@ public final class NodePluginGateway implements AutoCloseable {
     private final GroupManager groupManager;
     private final TemplateManager templateManager;
     private final NodeVersionStorage versionStorage;
+    private final NetworkAddressConfig networkAddressConfig;
     private final AtomicBoolean maintenance = new AtomicBoolean(false);
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
-    public NodePluginGateway(NodeWrapperRegistry wrapperRegistry, eu.kryocloud.node.service.runtime.NodeServiceRegistry serviceRegistry, NodeServiceScheduler serviceScheduler, GroupManager groupManager, TemplateManager templateManager, NodeVersionStorage versionStorage) {
+    public NodePluginGateway(NodeWrapperRegistry wrapperRegistry, eu.kryocloud.node.service.runtime.NodeServiceRegistry serviceRegistry, NodeServiceScheduler serviceScheduler, GroupManager groupManager, TemplateManager templateManager, NodeVersionStorage versionStorage, NetworkAddressConfig networkAddressConfig) {
         this.wrapperRegistry = wrapperRegistry;
         this.serviceRegistry = serviceRegistry;
         this.serviceScheduler = serviceScheduler;
         this.groupManager = groupManager;
         this.templateManager = templateManager;
         this.versionStorage = versionStorage;
+        this.networkAddressConfig = networkAddressConfig;
     }
 
     public void register() {
@@ -175,6 +182,9 @@ public final class NodePluginGateway implements AutoCloseable {
             case "maintenance.disable" -> maintenanceDisable();
             case "cloud.stats" -> stats();
             case "cloud.shutdown" -> cloudShutdown(packet.payload());
+            case "console.commands" -> consoleCommands();
+            case "console.suggest" -> consoleSuggest(packet.payload());
+            case "console.execute" -> consoleExecute(packet.payload());
             default -> throw new IllegalArgumentException("Unknown plugin route: " + packet.route());
         };
     }
@@ -441,6 +451,970 @@ public final class NodePluginGateway implements AutoCloseable {
         publishCloudStopping(reason);
         return Map.of("accepted", "true", "reason", reason);
     }
+
+    private Map<String, String> consoleCommands() {
+        List<Map<String, String>> commands = List.of(
+                commandSpec("help", "Shows ingame cloud command help", "help", true, false, List.of("?")),
+                commandSpec("cloud", "Shows KryoCloud runtime information", "cloud info", true, false, List.of("kryo", "kryocloud", "home")),
+                commandSpec("service", "Controls Minecraft services", "service <list|running|cleanup|service> ...", true, false, List.of("services", "server", "servers", "instance", "instances")),
+                commandSpec("group", "Controls Minecraft groups", "group <list|group> ...", true, false, List.of("groups", "task", "tasks")),
+                commandSpec("wrapper", "Lists and inspects wrappers", "wrapper <list|timedout|wrapper> [info]", true, false, List.of("wrappers", "node", "nodes")),
+                commandSpec("ip", "Manages Minecraft bind addresses", "ip <list|add|remove|default> ...", true, false, List.of("ips", "address", "addresses", "bind")),
+                commandSpec("version", "Manages Minecraft software versions", "version <list|refresh|software> ...", true, false, List.of("versions", "software")),
+                commandSpec("stats", "Shows KryoCloud runtime stats", "stats [groups|group <name>]", true, false, List.of("usage", "metrics")),
+                commandSpec("shutdown", "Stops KryoCloud from the Cloud CLI", "shutdown", false, true, List.of("stop", "exit", "quit"))
+        );
+
+        return list("commands", commands);
+    }
+
+    private Map<String, String> consoleSuggest(Map<String, String> payload) {
+        return stringList("suggestions", suggestions(consoleArguments(payload)));
+    }
+
+    private Map<String, String> consoleExecute(Map<String, String> payload) {
+        List<String> arguments = consoleArguments(payload);
+
+        if (arguments.isEmpty()) {
+            return consoleHelp();
+        }
+
+        String root = arguments.getFirst().toLowerCase(java.util.Locale.ROOT);
+        List<String> tail = arguments.size() <= 1 ? List.of() : arguments.subList(1, arguments.size());
+
+        return switch (root) {
+            case "help", "?" -> consoleHelp();
+            case "shutdown", "stop", "exit", "quit" -> consoleCliOnly("shutdown");
+            case "cloud", "kryo", "kryocloud", "home" -> consoleCloud(tail);
+            case "service", "services", "server", "servers", "instance", "instances" -> consoleService(tail);
+            case "group", "groups", "task", "tasks" -> consoleGroup(tail);
+            case "wrapper", "wrappers", "node", "nodes" -> consoleWrapper(tail);
+            case "ip", "ips", "address", "addresses", "bind" -> consoleIp(tail);
+            case "version", "versions", "software" -> consoleVersion(tail);
+            case "stats", "usage", "metrics" -> consoleStats(tail);
+            default -> consoleFail("Unknown command. Use /cloud help.");
+        };
+    }
+
+    private Map<String, String> consoleCloud(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "info")) {
+            return consoleOk("KryoCloud runtime information", List.of(
+                    "Home: " + KryoDirectoryLayout.ROOT,
+                    "Source: " + KryoDirectoryLayout.homeSource(),
+                    "Config: " + KryoDirectoryLayout.CONFIG,
+                    "Templates: " + KryoDirectoryLayout.TEMPLATES,
+                    "Storage: " + KryoDirectoryLayout.STORAGE,
+                    "Static: " + KryoDirectoryLayout.STATIC,
+                    "Temporary: " + KryoDirectoryLayout.TMP,
+                    "JDK: " + KryoDirectoryLayout.JDK
+            ));
+        }
+
+        if (keyword(arguments.getFirst(), "home", "set", "reset")) {
+            return consoleCliOnly("cloud home");
+        }
+
+        return consoleFail("Usage: cloud info");
+    }
+
+    private Map<String, String> consoleService(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "list")) {
+            return consoleServices(serviceRegistry.services(), "Minecraft services");
+        }
+
+        if (keyword(arguments.getFirst(), "running")) {
+            return consoleServices(serviceRegistry.runningServices(), "Running Minecraft services");
+        }
+
+        if (keyword(arguments.getFirst(), "cleanup")) {
+            return consoleServiceCleanup(arguments);
+        }
+
+        String service = arguments.getFirst();
+        String action = arguments.size() >= 2 ? arguments.get(1) : "info";
+
+        if (keyword(action, "info")) {
+            return consoleServiceInfo(service);
+        }
+
+        if (keyword(action, "stop")) {
+            serviceStop(Map.of("service", service), false);
+            return consoleOk("Stop request sent", List.of("Stop request sent to " + service + "."));
+        }
+
+        if (keyword(action, "kill")) {
+            serviceStop(Map.of("service", service), true);
+            return consoleOk("Kill request sent", List.of("Kill request sent to " + service + "."));
+        }
+
+        if (keyword(action, "logs", "log")) {
+            int lines = arguments.size() >= 3 ? positiveInteger(arguments.get(2), "lines") : 80;
+            serviceLogs(Map.of("service", service, "tail", String.valueOf(lines)));
+            return consoleOk("Logs request sent", List.of("Requested last " + lines + " log line(s) from " + service + "."));
+        }
+
+        if (keyword(action, "cmd", "command", "write")) {
+            String command = join(arguments, 2);
+
+            if (command.isBlank()) {
+                return consoleFail("Usage: service " + service + " cmd <command>");
+            }
+
+            serviceCommand(Map.of("service", service, "command", command));
+            return consoleOk("Command sent", List.of("Command sent to " + service + ": " + command));
+        }
+
+        return consoleFail("Usage: service " + service + " <info|stop|kill|logs|cmd>");
+    }
+
+    private Map<String, String> consoleServiceCleanup(List<String> arguments) {
+        boolean dryRun = arguments.stream().anyMatch(argument -> keyword(argument, "--dry-run", "dry", "preview"));
+        String target = cleanupTarget(arguments);
+
+        if ("all".equalsIgnoreCase(target)) {
+            Map<String, String> response = wrapperCleanupAll(Map.of("dryRun", String.valueOf(dryRun)));
+            return consoleOk("Cleanup request sent", List.of((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + response.getOrDefault("sent", "0") + " wrapper(s)."));
+        }
+
+        wrapperCleanup(Map.of("wrapper", target, "dryRun", String.valueOf(dryRun)));
+        return consoleOk("Cleanup request sent", List.of((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + target + "."));
+    }
+
+    private Map<String, String> consoleServiceInfo(String service) {
+        Optional<NodeServiceSnapshot> snapshot = serviceRegistry.service(service);
+
+        if (snapshot.isEmpty()) {
+            return consoleFail("Unknown Minecraft service: " + service);
+        }
+
+        NodeServiceSnapshot current = snapshot.get();
+        return consoleOk("Service " + current.serviceId(), List.of(
+                "Service: " + current.serviceId(),
+                "Group: " + current.groupName(),
+                "Type: " + current.serviceType().name(),
+                "State: " + current.state().name(),
+                "Wrapper: " + current.wrapperId(),
+                "Address: " + current.host() + ":" + current.port(),
+                "Memory: " + current.processMemoryMb() + "MB",
+                "CPU: " + String.format(java.util.Locale.ROOT, "%.1f%%", current.cpuLoadPermille() / 10.0D),
+                "Uptime: " + current.uptimeMillis() + "ms",
+                "Message: " + current.message()
+        ));
+    }
+
+    private Map<String, String> consoleServices(List<NodeServiceSnapshot> services, String title) {
+        if (services.isEmpty()) {
+            return consoleOk(title, List.of("No Minecraft services known."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        lines.add(title + ":");
+
+        for (NodeServiceSnapshot service : services) {
+            lines.add(service.serviceId() + " • " + service.state().name() + " • " + service.groupName() + " • " + service.wrapperId() + " • " + service.host() + ":" + service.port());
+        }
+
+        return consoleOk(title, lines);
+    }
+
+    private Map<String, String> consoleGroup(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "list")) {
+            return consoleGroups();
+        }
+
+        if (keyword(arguments.getFirst(), "setup", "create")) {
+            return consoleDisabled("group setup");
+        }
+
+        String group = arguments.getFirst();
+        String action = arguments.size() >= 2 ? arguments.get(1) : "info";
+
+        if (keyword(action, "info")) {
+            return consoleGroupInfo(group);
+        }
+
+        if (keyword(action, "start")) {
+            int count = arguments.size() >= 3 ? positiveInteger(arguments.get(2), "count") : missingMinimum(group);
+            List<ServiceStartResult> results = serviceScheduler.startGroup(group, Math.max(1, count));
+            return consoleStartResults("Started " + results.size() + " service(s) for " + group + ".", results, group);
+        }
+
+        if (keyword(action, "stop")) {
+            int sent = stopGroup(group, false);
+            return consoleOk("Stop request sent", List.of("Stop request sent to " + sent + " service(s) in " + group + "."));
+        }
+
+        if (keyword(action, "kill")) {
+            int sent = stopGroup(group, true);
+            return consoleOk("Kill request sent", List.of("Kill request sent to " + sent + " service(s) in " + group + "."));
+        }
+
+        if (keyword(action, "restart")) {
+            int stopped = stopGroup(group, false);
+            List<ServiceStartResult> results = serviceScheduler.startGroup(group, missingMinimum(group));
+            List<String> lines = new ArrayList<>();
+            lines.add("Stop request sent to " + stopped + " service(s) in " + group + ".");
+            lines.add("Start requested for " + results.size() + " service(s).");
+            addStartResultLines(lines, results, group);
+            return consoleOk("Restart request sent", lines);
+        }
+
+        return consoleFail("Usage: group " + group + " <info|start|stop|kill|restart>");
+    }
+
+    private Map<String, String> consoleGroups() {
+        Collection<IGroup> groups = groupManager.groups();
+
+        if (groups.isEmpty()) {
+            return consoleOk("Minecraft groups", List.of("No groups configured."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        lines.add("Minecraft groups:");
+
+        for (IGroup group : groups) {
+            lines.add(group.name() + " • " + group.serviceType().name() + " • " + group.minCount() + "/" + group.maxCount() + " • " + group.maxMemory() + "MB • " + group.templateName());
+        }
+
+        return consoleOk("Minecraft groups", lines);
+    }
+
+    private Map<String, String> consoleGroupInfo(String name) {
+        IGroup group = groupManager.groupByName(name);
+
+        if (group == null) {
+            return consoleFail("Unknown group: " + name);
+        }
+
+        return consoleOk("Group " + group.name(), List.of(
+                "Group: " + group.name(),
+                "Type: " + group.serviceType().name(),
+                "Min online: " + group.minCount(),
+                "Max online: " + group.maxCount(),
+                "Memory: " + group.maxMemory() + "MB",
+                "Template: " + group.templateName(),
+                "Version: " + group.softwareVersion()
+        ));
+    }
+
+    private Map<String, String> consoleWrapper(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "list")) {
+            return consoleWrappers(wrapperRegistry.wrappers(), "Connected wrappers");
+        }
+
+        if (keyword(arguments.getFirst(), "timedout")) {
+            return consoleWrappers(wrapperRegistry.timedOutWrappers(), "Timed out wrappers");
+        }
+
+        if (keyword(arguments.getFirst(), "cleanup")) {
+            return consoleWrapperCleanup(arguments);
+        }
+
+        String wrapper = arguments.getFirst();
+        String action = arguments.size() >= 2 ? arguments.get(1) : "info";
+
+        if (keyword(action, "info")) {
+            return consoleWrapperInfo(wrapper);
+        }
+
+        return consoleFail("Usage: wrapper " + wrapper + " info");
+    }
+
+    private Map<String, String> consoleWrapperCleanup(List<String> arguments) {
+        boolean dryRun = arguments.stream().anyMatch(argument -> keyword(argument, "--dry-run", "dry", "preview"));
+        String target = cleanupTarget(arguments);
+
+        if ("all".equalsIgnoreCase(target)) {
+            Map<String, String> response = wrapperCleanupAll(Map.of("dryRun", String.valueOf(dryRun)));
+            return consoleOk("Cleanup request sent", List.of((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + response.getOrDefault("sent", "0") + " wrapper(s)."));
+        }
+
+        wrapperCleanup(Map.of("wrapper", target, "dryRun", String.valueOf(dryRun)));
+        return consoleOk("Cleanup request sent", List.of((dryRun ? "Cleanup preview" : "Cleanup") + " requested on " + target + "."));
+    }
+
+    private Map<String, String> consoleWrappers(List<WrapperSnapshot> wrappers, String title) {
+        if (wrappers.isEmpty()) {
+            return consoleOk(title, List.of("No wrappers found."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        lines.add(title + ":");
+
+        for (WrapperSnapshot wrapper : wrappers) {
+            lines.add(wrapper.wrapperId() + " • " + wrapper.state().name() + " • services " + wrapper.runningServices() + " • RAM " + wrapper.usedMemoryMb() + "/" + wrapper.maxMemoryMb() + "MB • " + wrapper.remoteAddress());
+        }
+
+        return consoleOk(title, lines);
+    }
+
+    private Map<String, String> consoleWrapperInfo(String wrapper) {
+        Optional<WrapperSnapshot> snapshot = wrapperRegistry.wrapper(wrapper);
+
+        if (snapshot.isEmpty()) {
+            return consoleFail("Unknown wrapper: " + wrapper);
+        }
+
+        WrapperSnapshot current = snapshot.get();
+        return consoleOk("Wrapper " + current.wrapperId(), List.of(
+                "Wrapper: " + current.wrapperId(),
+                "State: " + current.state().name(),
+                "Hostname: " + current.hostname(),
+                "Address: " + current.address(),
+                "OS: " + current.osName(),
+                "Cores: " + current.availableProcessors(),
+                "Process RAM: " + current.usedMemoryMb() + "/" + current.maxMemoryMb() + "MB",
+                "Services: " + current.runningServices(),
+                "Remote: " + current.remoteAddress()
+        ));
+    }
+
+    private Map<String, String> consoleIp(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "list")) {
+            return consoleIpList();
+        }
+
+        String action = arguments.getFirst();
+
+        if (keyword(action, "add")) {
+            return consoleIpAdd(arguments);
+        }
+
+        if (keyword(action, "remove", "delete")) {
+            return consoleIpRemove(arguments);
+        }
+
+        if (keyword(action, "default")) {
+            return consoleIpDefault(arguments);
+        }
+
+        return consoleFail("Usage: ip list | ip add <server|proxy> <address> | ip remove <server|proxy> <address> | ip default <server|proxy> <address>");
+    }
+
+    private Map<String, String> consoleIpList() {
+        List<String> lines = new ArrayList<>();
+        lines.add("Minecraft bind addresses:");
+        lines.add("Server default: " + networkAddressConfig.getDefaultServerAddress());
+        lines.add("Proxy default: " + networkAddressConfig.getDefaultProxyAddress());
+        lines.add("Server addresses: " + String.join(", ", networkAddressConfig.getServerAddresses()));
+        lines.add("Proxy addresses: " + String.join(", ", networkAddressConfig.getProxyAddresses()));
+        return consoleOk("Minecraft bind addresses", lines);
+    }
+
+    private Map<String, String> consoleIpAdd(List<String> arguments) {
+        if (arguments.size() < 3) {
+            return consoleFail("Usage: ip add <server|proxy> <address>");
+        }
+
+        String type = arguments.get(1);
+        String address = arguments.get(2);
+
+        if (serverType(type)) {
+            networkAddressConfig.addServerAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Address added", List.of("Added server bind address " + address + "."));
+        }
+
+        if (proxyType(type)) {
+            networkAddressConfig.addProxyAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Address added", List.of("Added proxy bind address " + address + "."));
+        }
+
+        return consoleFail("Type must be server or proxy.");
+    }
+
+    private Map<String, String> consoleIpRemove(List<String> arguments) {
+        if (arguments.size() < 3) {
+            return consoleFail("Usage: ip remove <server|proxy> <address>");
+        }
+
+        String type = arguments.get(1);
+        String address = arguments.get(2);
+
+        if (serverType(type)) {
+            boolean removed = networkAddressConfig.removeServerAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Address removed", List.of(removed ? "Removed server bind address " + address + "." : "Server bind address was not registered: " + address));
+        }
+
+        if (proxyType(type)) {
+            boolean removed = networkAddressConfig.removeProxyAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Address removed", List.of(removed ? "Removed proxy bind address " + address + "." : "Proxy bind address was not registered: " + address));
+        }
+
+        return consoleFail("Type must be server or proxy.");
+    }
+
+    private Map<String, String> consoleIpDefault(List<String> arguments) {
+        if (arguments.size() < 3) {
+            return consoleFail("Usage: ip default <server|proxy> <address>");
+        }
+
+        String type = arguments.get(1);
+        String address = arguments.get(2);
+
+        if (serverType(type)) {
+            networkAddressConfig.setDefaultServerAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Default address updated", List.of("Default server bind address is now " + address + "."));
+        }
+
+        if (proxyType(type)) {
+            networkAddressConfig.setDefaultProxyAddress(address);
+            networkAddressConfig.save();
+            return consoleOk("Default address updated", List.of("Default proxy bind address is now " + address + "."));
+        }
+
+        return consoleFail("Type must be server or proxy.");
+    }
+
+    private Map<String, String> consoleVersion(List<String> arguments) {
+        if (arguments.isEmpty() || keyword(arguments.getFirst(), "list", "available")) {
+            return consoleVersionSoftware();
+        }
+
+        if (keyword(arguments.getFirst(), "refresh", "reload")) {
+            int refreshed = versionStorage.refreshManifests();
+            publish(event("version.VersionRefreshedEvent"), "", "", "", Map.of("refreshed", String.valueOf(refreshed)));
+            return consoleOk("Versions refreshed", List.of("Loaded " + refreshed + " Minecraft software manifest(s)."));
+        }
+
+        if (keyword(arguments.getFirst(), "create", "scan")) {
+            return consoleCliOnly("version " + arguments.getFirst());
+        }
+
+        if (keyword(arguments.getFirst(), "install")) {
+            if (arguments.size() < 2) {
+                return consoleFail("Usage: version install <software> [version|latest]");
+            }
+
+            String software = arguments.get(1);
+            String version = arguments.size() >= 3 ? arguments.get(2) : "latest";
+            return consoleVersionInstall(software, version);
+        }
+
+        String software = arguments.getFirst();
+        String action = arguments.size() >= 2 ? arguments.get(1) : "info";
+
+        if (keyword(action, "list", "versions")) {
+            return consoleVersionList(software);
+        }
+
+        if (keyword(action, "info")) {
+            String version = arguments.size() >= 3 ? arguments.get(2) : "latest";
+            return consoleVersionInfo(software, version);
+        }
+
+        if (keyword(action, "install")) {
+            String version = arguments.size() >= 3 ? arguments.get(2) : "latest";
+            return consoleVersionInstall(software, version);
+        }
+
+        return consoleFail("Usage: version " + software + " <list|info [version]|install [version]>");
+    }
+
+    private Map<String, String> consoleVersionSoftware() {
+        List<String> software = versionStorage.availableSoftware();
+
+        if (software.isEmpty()) {
+            return consoleOk("Minecraft software manifests", List.of("No Minecraft software manifests are registered. Try /cloud version refresh."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        lines.add("Minecraft software manifests:");
+
+        for (String entry : software) {
+            lines.add(entry + " • " + versionStorage.manifestSource(entry));
+        }
+
+        return consoleOk("Minecraft software manifests", lines);
+    }
+
+    private Map<String, String> consoleVersionList(String software) {
+        SoftwareManifest manifest = versionStorage.manifest(software);
+        List<String> lines = new ArrayList<>();
+        lines.add("Versions for " + software + ":");
+        lines.add("Type: " + manifest.type().name());
+        lines.add("Latest: " + manifest.latestVersion());
+
+        for (String version : manifest.versions().keySet().stream().sorted(java.util.Comparator.reverseOrder()).toList()) {
+            SoftwareVersion softwareVersion = manifest.versions().get(version);
+            lines.add(version + " • Java " + softwareVersion.javaVersion() + " • " + softwareVersion.javaFlags().size() + " JVM flag(s)");
+        }
+
+        return consoleOk("Versions for " + software, lines);
+    }
+
+    private Map<String, String> consoleVersionInfo(String software, String requestedVersion) {
+        SoftwareManifest manifest = versionStorage.manifest(software);
+        SoftwareVersion version = manifest.resolve(requestedVersion);
+        List<String> lines = new ArrayList<>();
+        lines.add(software + " " + version.version());
+        lines.add("Type: " + manifest.type().name());
+        lines.add("Latest: " + manifest.latestVersion());
+        lines.add("Java: " + version.javaVersion());
+        lines.add("Manifest: " + versionStorage.manifestSource(software));
+        lines.add("Download: " + version.link());
+
+        if (!version.javaFlags().isEmpty()) {
+            lines.add("JVM flags: " + String.join(" ", version.javaFlags()));
+        }
+
+        return consoleOk(software + " " + version.version(), lines);
+    }
+
+    private Map<String, String> consoleVersionInstall(String software, String version) {
+        versionStorage.installFromManifest(software, version, true);
+        publish(event("version.VersionInstalledEvent"), "", "", "", Map.of("version", version, "type", software, "path", versionStorage.rootDirectory().resolve(software).resolve(version).toString(), "installedAt", Instant.now().toString()));
+        return consoleOk("Version installed", List.of("Installed " + software + " " + version + "."));
+    }
+
+    private Map<String, String> consoleStats(List<String> arguments) {
+        if (arguments.isEmpty()) {
+            Map<String, String> snapshot = stats();
+            return consoleOk("KryoCloud stats", List.of(
+                    "Wrappers: " + snapshot.getOrDefault("onlineWrappers", "0") + "/" + snapshot.getOrDefault("wrappers", "0"),
+                    "Services: " + snapshot.getOrDefault("runningServices", "0") + "/" + snapshot.getOrDefault("services", "0"),
+                    "Groups: " + snapshot.getOrDefault("groups", "0"),
+                    "RAM: " + snapshot.getOrDefault("usedMemoryMb", "0") + "/" + snapshot.getOrDefault("maxMemoryMb", "0") + "MB"
+            ));
+        }
+
+        if (keyword(arguments.getFirst(), "live")) {
+            return consoleCliOnly("stats live");
+        }
+
+        if (keyword(arguments.getFirst(), "groups")) {
+            return consoleStatsGroups();
+        }
+
+        if (keyword(arguments.getFirst(), "group")) {
+            if (arguments.size() < 2) {
+                return consoleFail("Usage: stats group <name>");
+            }
+
+            return consoleStatsGroup(arguments.get(1));
+        }
+
+        return consoleFail("Usage: stats [groups|group <name>]");
+    }
+
+    private Map<String, String> consoleStatsGroups() {
+        Collection<IGroup> groups = groupManager.groups();
+
+        if (groups.isEmpty()) {
+            return consoleOk("Group stats", List.of("No groups configured."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        lines.add("Group stats:");
+
+        for (IGroup group : groups) {
+            long running = serviceRegistry.services(group.name()).stream().filter(service -> service.state() == CloudServiceState.RUNNING).count();
+            lines.add(group.name() + " • " + running + "/" + group.maxCount() + " services • " + group.maxMemory() + "MB configured");
+        }
+
+        return consoleOk("Group stats", lines);
+    }
+
+    private Map<String, String> consoleStatsGroup(String name) {
+        IGroup group = groupManager.groupByName(name);
+
+        if (group == null) {
+            return consoleFail("Unknown group: " + name);
+        }
+
+        List<NodeServiceSnapshot> services = serviceRegistry.services(group.name());
+        long running = services.stream().filter(service -> service.state() == CloudServiceState.RUNNING).count();
+        int memory = services.stream().mapToInt(NodeServiceSnapshot::processMemoryMb).sum();
+        return consoleOk("Group " + group.name(), List.of(
+                "Group: " + group.name(),
+                "Type: " + group.serviceType().name(),
+                "Services: " + running + "/" + group.maxCount(),
+                "Known services: " + services.size(),
+                "Process RAM: " + memory + "MB",
+                "Configured RAM: " + group.maxMemory() + "MB",
+                "Static: " + group.staticServices()
+        ));
+    }
+
+    private Map<String, String> consoleHelp() {
+        return consoleOk("KryoCloud ingame commands", List.of(
+                "/cloud service list",
+                "/cloud service <service> <info|stop|kill|logs|cmd>",
+                "/cloud group list",
+                "/cloud group <group> <info|start|stop|kill|restart>",
+                "/cloud wrapper list",
+                "/cloud wrapper <wrapper> info",
+                "/cloud ip list",
+                "/cloud version list",
+                "/cloud stats",
+                "/cloud shutdown"
+        ));
+    }
+
+    private Map<String, String> consoleCliOnly(String command) {
+        return consoleFail("The command '" + command + "' can only be executed in the Cloud CLI.");
+    }
+
+    private Map<String, String> consoleDisabled(String command) {
+        return consoleFail("The command '" + command + "' is disabled ingame because it opens an interactive setup wizard.");
+    }
+
+    private Map<String, String> consoleOk(String message, List<String> lines) {
+        return consoleResult(true, message, lines);
+    }
+
+    private Map<String, String> consoleFail(String message) {
+        return consoleResult(false, message, List.of(message));
+    }
+
+    private Map<String, String> consoleStartResults(String message, List<ServiceStartResult> results, String group) {
+        List<String> lines = new ArrayList<>();
+        lines.add(message);
+        addStartResultLines(lines, results, group);
+        return consoleOk(message, lines);
+    }
+
+    private void addStartResultLines(List<String> lines, List<ServiceStartResult> results, String group) {
+        for (ServiceStartResult result : results) {
+            lines.add(result.serviceId() + " • " + group + " • " + result.wrapperId());
+        }
+    }
+
+    private Map<String, String> consoleResult(boolean success, String message, List<String> lines) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("success", String.valueOf(success));
+        values.put("message", message == null ? "" : message);
+        values.putAll(stringList("lines", lines == null || lines.isEmpty() ? List.of(message == null ? "" : message) : lines));
+        return Map.copyOf(values);
+    }
+
+    private Map<String, String> commandSpec(String name, String description, String usage, boolean executable, boolean cliOnly, List<String> aliases) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("name", name);
+        values.put("description", description);
+        values.put("usage", usage);
+        values.put("executable", String.valueOf(executable));
+        values.put("cliOnly", String.valueOf(cliOnly));
+        values.putAll(stringList("aliases", aliases));
+        return Map.copyOf(values);
+    }
+
+    private Map<String, String> stringList(String prefix, List<String> values) {
+        Map<String, String> payload = new LinkedHashMap<>();
+        List<String> safeValues = values == null ? List.of() : values;
+        payload.put(prefix + ".size", String.valueOf(safeValues.size()));
+
+        for (int index = 0; index < safeValues.size(); index++) {
+            payload.put(prefix + "." + index, safeValues.get(index));
+        }
+
+        return Map.copyOf(payload);
+    }
+
+    private List<String> suggestions(List<String> arguments) {
+        if (arguments.isEmpty()) {
+            return rootSuggestions();
+        }
+
+        String root = arguments.getFirst().toLowerCase(java.util.Locale.ROOT);
+        int index = arguments.size() - 1;
+
+        if (arguments.size() == 1) {
+            return filtered(rootSuggestions(), root);
+        }
+
+        return switch (root) {
+            case "cloud", "kryo", "kryocloud", "home" -> filtered(List.of("info", "home"), arguments.get(index));
+            case "service", "services", "server", "servers", "instance", "instances" -> serviceSuggestions(arguments, index);
+            case "group", "groups", "task", "tasks" -> groupSuggestions(arguments, index);
+            case "wrapper", "wrappers", "node", "nodes" -> wrapperSuggestions(arguments, index);
+            case "ip", "ips", "address", "addresses", "bind" -> ipSuggestions(arguments, index);
+            case "version", "versions", "software" -> versionSuggestions(arguments, index);
+            case "stats", "usage", "metrics" -> statsSuggestions(arguments, index);
+            default -> List.of();
+        };
+    }
+
+    private List<String> rootSuggestions() {
+        return List.of("help", "cloud", "service", "group", "wrapper", "ip", "version", "stats", "shutdown");
+    }
+
+    private List<String> serviceSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            List<String> values = new ArrayList<>(List.of("list", "running", "cleanup"));
+            serviceRegistry.services().forEach(service -> values.add(service.serviceId()));
+            return filtered(values, arguments.get(index));
+        }
+
+        if (index == 2 && !keyword(arguments.get(1), "list", "running", "cleanup")) {
+            return filtered(List.of("info", "stop", "kill", "logs", "cmd", "command"), arguments.get(index));
+        }
+
+        if (index == 2 && keyword(arguments.get(1), "cleanup")) {
+            List<String> values = new ArrayList<>(List.of("all", "--dry-run"));
+            wrapperRegistry.wrappers().forEach(wrapper -> values.add(wrapper.wrapperId()));
+            return filtered(values, arguments.get(index));
+        }
+
+        if (index == 3 && keyword(arguments.get(1), "cleanup")) {
+            return filtered(List.of("--dry-run"), arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> groupSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            List<String> values = new ArrayList<>(List.of("list"));
+            groupManager.groups().forEach(group -> values.add(group.name()));
+            return filtered(values, arguments.get(index));
+        }
+
+        if (index == 2 && !keyword(arguments.get(1), "list")) {
+            return filtered(List.of("info", "start", "stop", "kill", "restart"), arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> wrapperSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            List<String> values = new ArrayList<>(List.of("list", "timedout", "cleanup"));
+            wrapperRegistry.wrappers().forEach(wrapper -> values.add(wrapper.wrapperId()));
+            return filtered(values, arguments.get(index));
+        }
+
+        if (index == 2 && !keyword(arguments.get(1), "list", "timedout", "cleanup")) {
+            return filtered(List.of("info"), arguments.get(index));
+        }
+
+        if (index == 2 && keyword(arguments.get(1), "cleanup")) {
+            List<String> values = new ArrayList<>(List.of("all", "--dry-run"));
+            wrapperRegistry.wrappers().forEach(wrapper -> values.add(wrapper.wrapperId()));
+            return filtered(values, arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> ipSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            return filtered(List.of("list", "add", "remove", "default"), arguments.get(index));
+        }
+
+        if (index == 2 && keyword(arguments.get(1), "add", "remove", "default")) {
+            return filtered(List.of("server", "proxy"), arguments.get(index));
+        }
+
+        if (index == 3 && keyword(arguments.get(1), "remove", "default")) {
+            return filtered(addresses(arguments.get(2)), arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> versionSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            List<String> values = new ArrayList<>(List.of("list", "refresh", "install"));
+            values.addAll(versionStorage.availableSoftware());
+            return filtered(values, arguments.get(index));
+        }
+
+        if (index == 2 && keyword(arguments.get(1), "install")) {
+            return filtered(versionStorage.availableSoftware(), arguments.get(index));
+        }
+
+        if (index == 2 && !keyword(arguments.get(1), "list", "refresh", "install")) {
+            return filtered(List.of("list", "versions", "info", "install"), arguments.get(index));
+        }
+
+        if (index == 3 && !keyword(arguments.get(1), "list", "refresh", "install")) {
+            return filtered(versions(arguments.get(1)), arguments.get(index));
+        }
+
+        if (index == 3 && keyword(arguments.get(1), "install")) {
+            return filtered(versions(arguments.get(2)), arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> statsSuggestions(List<String> arguments, int index) {
+        if (index == 1) {
+            return filtered(List.of("groups", "group", "live"), arguments.get(index));
+        }
+
+        if (index == 2 && keyword(arguments.get(1), "group")) {
+            List<String> values = groupManager.groups().stream().map(IGroup::name).toList();
+            return filtered(values, arguments.get(index));
+        }
+
+        return List.of();
+    }
+
+    private List<String> versions(String software) {
+        try {
+            List<String> versions = new ArrayList<>(List.of("latest"));
+            versions.addAll(versionStorage.availableVersions(software));
+            return versions;
+        } catch (Exception exception) {
+            return List.of("latest");
+        }
+    }
+
+    private List<String> addresses(String type) {
+        if (proxyType(type)) {
+            return networkAddressConfig.getProxyAddresses();
+        }
+
+        return networkAddressConfig.getServerAddresses();
+    }
+
+    private List<String> filtered(List<String> values, String prefix) {
+        String value = prefix == null ? "" : prefix.toLowerCase(java.util.Locale.ROOT);
+        return values.stream().filter(entry -> entry.toLowerCase(java.util.Locale.ROOT).startsWith(value)).distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
+
+    private List<String> consoleArguments(Map<String, String> payload) {
+        int size = integer(payload, "arguments.size", -1);
+
+        if (size >= 0) {
+            List<String> arguments = new ArrayList<>();
+
+            for (int index = 0; index < size; index++) {
+                String value = payload.getOrDefault("arguments." + index, "");
+
+                if (value.isBlank()) {
+                    continue;
+                }
+
+                arguments.add(value);
+            }
+
+            return List.copyOf(arguments);
+        }
+
+        return tokenize(payload.getOrDefault("input", ""));
+    }
+
+    private List<String> tokenize(String input) {
+        if (input == null || input.isBlank()) {
+            return List.of();
+        }
+
+        List<String> values = new ArrayList<>();
+        StringBuilder buffer = new StringBuilder();
+        boolean quoted = false;
+
+        for (int index = 0; index < input.length(); index++) {
+            char character = input.charAt(index);
+
+            if (character == '"') {
+                quoted = !quoted;
+                continue;
+            }
+
+            if (Character.isWhitespace(character) && !quoted) {
+                if (buffer.isEmpty()) {
+                    continue;
+                }
+
+                values.add(buffer.toString());
+                buffer.setLength(0);
+                continue;
+            }
+
+            buffer.append(character);
+        }
+
+        if (!buffer.isEmpty()) {
+            values.add(buffer.toString());
+        }
+
+        return List.copyOf(values);
+    }
+
+    private String cleanupTarget(List<String> arguments) {
+        for (String argument : arguments.subList(1, arguments.size())) {
+            if (keyword(argument, "--dry-run", "dry", "preview")) {
+                continue;
+            }
+
+            return argument;
+        }
+
+        return "all";
+    }
+
+    private int stopGroup(String group, boolean force) {
+        int sent = 0;
+
+        for (NodeServiceSnapshot service : serviceRegistry.services(group)) {
+            if (service.state() == CloudServiceState.STOPPED || service.state() == CloudServiceState.FAILED) {
+                continue;
+            }
+
+            serviceStop(Map.of("service", service.serviceId()), force);
+            sent++;
+        }
+
+        return sent;
+    }
+
+    private int missingMinimum(String groupName) {
+        IGroup group = groupManager.groupByName(groupName);
+
+        if (group == null) {
+            throw new IllegalArgumentException("Unknown group: " + groupName);
+        }
+
+        return Math.max(1, group.minCount());
+    }
+
+    private int positiveInteger(String input, String name) {
+        try {
+            int value = Integer.parseInt(input);
+
+            if (value < 1) {
+                throw new IllegalArgumentException(name + " must be greater than 0");
+            }
+
+            return value;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(name + " must be a valid number", exception);
+        }
+    }
+
+    private String join(List<String> arguments, int start) {
+        if (arguments.size() <= start) {
+            return "";
+        }
+
+        return String.join(" ", arguments.subList(start, arguments.size()));
+    }
+
+    private boolean serverType(String type) {
+        return "server".equalsIgnoreCase(type) || "local".equalsIgnoreCase(type) || "backend".equalsIgnoreCase(type);
+    }
+
+    private boolean proxyType(String type) {
+        return "proxy".equalsIgnoreCase(type) || "public".equalsIgnoreCase(type);
+    }
+
+    private boolean keyword(String value, String... keywords) {
+        for (String keyword : keywords) {
+            if (keyword.equalsIgnoreCase(value)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 
     private void publish(String route, String service, String group, String wrapper, Map<String, String> payload) {
         PluginGatewayEventPacket packet = new PluginGatewayEventPacket(UUID.randomUUID(), route, service == null ? "" : service, group == null ? "" : group, wrapper == null ? "" : wrapper, payload);

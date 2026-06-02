@@ -1,0 +1,10 @@
+{
+  "id": "kryocloud-proxy-bridge",
+  "name": "KryoCloudProxyBridge",
+  "version": "1.0.0-alpha.1",
+  "description": "Connects Velocity proxies with KryoCloud services",
+  "authors": [
+    "KryoCloud"
+  ],
+  "main": "eu.kryocloud.plugins.proxybridge.velocity.VelocityCloudProxyPlugin"
+}

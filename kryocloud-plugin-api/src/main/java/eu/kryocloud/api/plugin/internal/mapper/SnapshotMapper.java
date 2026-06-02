@@ -126,6 +126,17 @@ public final class SnapshotMapper {
         return List.copyOf(result);
     }
 
+    public static List<String> values(Map<String, String> payload, String prefix) {
+        int size = Payload.integer(payload, prefix + ".size");
+        List<String> result = new ArrayList<>();
+
+        for (int index = 0; index < size; index++) {
+            result.add(payload.getOrDefault(prefix + "." + index, ""));
+        }
+
+        return List.copyOf(result);
+    }
+
     public static <T extends Enum<T>> T enumValue(Class<T> type, String value, T fallback) {
         if (value == null || value.isBlank()) {
             return fallback;

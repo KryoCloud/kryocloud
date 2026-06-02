@@ -1,6 +1,7 @@
 package eu.kryocloud.api.plugin.internal.remote;
 
 import eu.kryocloud.api.plugin.cloud.IPluginCloud;
+import eu.kryocloud.api.plugin.cloud.controller.ICloudConsoleController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudGroupController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudMaintenanceController;
 import eu.kryocloud.api.plugin.cloud.controller.ICloudServiceController;
@@ -17,6 +18,7 @@ public final class RemotePluginCloud implements IPluginCloud {
     private final ICloudTemplateController templates;
     private final ICloudVersionController versions;
     private final ICloudMaintenanceController maintenance;
+    private final ICloudConsoleController console;
 
     public RemotePluginCloud(PluginRequestClient client) {
         this.services = new RemoteServiceController(client);
@@ -25,6 +27,7 @@ public final class RemotePluginCloud implements IPluginCloud {
         this.templates = new RemoteTemplateController(client);
         this.versions = new RemoteVersionController(client);
         this.maintenance = new RemoteMaintenanceController(client);
+        this.console = new RemoteConsoleController(client);
     }
 
     @Override
@@ -55,6 +58,11 @@ public final class RemotePluginCloud implements IPluginCloud {
     @Override
     public ICloudMaintenanceController maintenance() {
         return maintenance;
+    }
+
+    @Override
+    public ICloudConsoleController console() {
+        return console;
     }
 
 }
