@@ -12,17 +12,25 @@ public final class KryoPrompt {
         this.nodeName = nodeName;
     }
 
-    public String render() {
+    public StringBuilder renderStartBuilder() {
         StringBuilder builder = new StringBuilder();
         builder.append(Tone.PRIMARY.paint(Glyph.SNOWFLAKE.value()));
         builder.append(' ');
-        builder.append(Tone.SHIMMER.paintBold("kryo"));
-        builder.append(Tone.MUTED.paint(Glyph.ARROW.value()));
+        builder.append(System.getProperty("user.name"));
+        builder.append('@');
         builder.append(Tone.SECONDARY.paint(nodeName));
+        return builder;
+    }
+
+    public String renderEndBuilder(StringBuilder builder) {
         builder.append(' ');
         builder.append(Tone.PRIMARY.paint(Glyph.PROMPT.value()));
         builder.append(' ');
         return builder.toString();
+    }
+
+    public String render() {
+        return renderEndBuilder(renderStartBuilder());
     }
 
     public String renderWithStatus(int runningServices, int wrappers) {
@@ -34,21 +42,13 @@ public final class KryoPrompt {
             throw new IllegalArgumentException("wrappers must not be negative");
         }
 
-        StringBuilder builder = new StringBuilder();
-        builder.append(Tone.PRIMARY.paint(Glyph.SNOWFLAKE.value()));
-        builder.append(' ');
-        builder.append(Tone.SHIMMER.paintBold("kryo"));
-        builder.append(Tone.MUTED.paint(Glyph.ARROW.value()));
-        builder.append(Tone.SECONDARY.paint(nodeName));
+        StringBuilder builder = renderStartBuilder();
         builder.append(Tone.DEEP.paint(" " + Glyph.SEPARATOR.value() + " "));
         builder.append(Tone.MUTED.paint("svc "));
         builder.append(Tone.ACCENT.paint(String.valueOf(runningServices)));
         builder.append(Tone.DEEP.paint(" " + Glyph.SEPARATOR.value() + " "));
         builder.append(Tone.MUTED.paint("wrp "));
         builder.append(Tone.INFO.paint(String.valueOf(wrappers)));
-        builder.append(' ');
-        builder.append(Tone.PRIMARY.paint(Glyph.PROMPT.value()));
-        builder.append(' ');
-        return builder.toString();
+        return renderEndBuilder(builder);
     }
 }

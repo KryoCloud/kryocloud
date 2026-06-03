@@ -51,8 +51,8 @@ public final class CloudSetupWizard {
 
         printHeader();
 
-        String cloudName = askCloudName("Internal cloud name", launchConfig.getCloudName());
         ConfigType configType = askConfigType("Config format", launchConfig.getFileExtension());
+        String cloudName = askCloudName("Internal cloud name", launchConfig.getCloudName());
         String token = defaultToken(securityConfig.getToken());
         String nodeHost = ask("Node bind IP", launchConfig.getHost());
         int nodePort = askPort("Node protocol port", launchConfig.getPort());
@@ -135,7 +135,7 @@ public final class CloudSetupWizard {
     private void printHeader() {
         System.out.println();
         System.out.println("❄ KryoCloud first setup");
-        System.out.println("This configures the cloud identity, node protocol, wrapper connection and Minecraft bind addresses.");
+        System.out.println("This configures the config format, cloud identity, node protocol, wrapper connection and Minecraft bind addresses.");
         System.out.println("Groups can be created afterwards with: group setup");
         System.out.println();
     }

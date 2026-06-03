@@ -7,6 +7,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -62,8 +63,10 @@ public final class ClasspathLoader implements AutoCloseable {
         Downloader downloader = new Downloader();
         Set<Path> classpath = new LinkedHashSet<>();
 
+        classpath.add(launcherLocation());
+
         for (Artifact artifact : PROJECT_ARTIFACTS) {
-            classpath.add(resolveProjectArtifact(projectRoot, artifact, libs, downloader));
+            resolveLocalProjectArtifact(projectRoot, artifact).ifPresent(classpath::add);
         }
 
         for (Artifact artifact : REMOTE_ARTIFACTS) {
@@ -73,11 +76,13 @@ public final class ClasspathLoader implements AutoCloseable {
         validateClasspath(classpath);
 
         List<URL> urls = new ArrayList<>();
+
         for (Path path : classpath) {
             urls.add(path.toUri().toURL());
         }
 
         URLClassLoader loader = new URLClassLoader(urls.toArray(URL[]::new), ClassLoader.getPlatformClassLoader());
+        validateRuntimeClasses(loader);
         return new ClasspathLoader(loader);
     }
 
@@ -104,26 +109,24 @@ public final class ClasspathLoader implements AutoCloseable {
         classLoader.close();
     }
 
-    private static Path resolveProjectArtifact(Path projectRoot, Artifact artifact, Path libs, Downloader downloader) throws Exception {
+    private static java.util.Optional<Path> resolveLocalProjectArtifact(Path projectRoot, Artifact artifact) {
+        if (projectRoot == null) {
+            return java.util.Optional.empty();
+        }
+
         Path localTarget = projectRoot.resolve(artifact.artifactId()).resolve("target").resolve(artifact.artifactId() + "-" + artifact.version() + ".jar");
 
         if (Files.exists(localTarget)) {
-            return localTarget.toAbsolutePath().normalize();
+            return java.util.Optional.of(localTarget.toAbsolutePath().normalize());
         }
 
         Path localFinal = projectRoot.resolve(artifact.artifactId()).resolve("target").resolve(artifact.artifactId() + ".jar");
 
         if (Files.exists(localFinal)) {
-            return localFinal.toAbsolutePath().normalize();
+            return java.util.Optional.of(localFinal.toAbsolutePath().normalize());
         }
 
-        Path m2 = m2Artifact(artifact);
-
-        if (Files.exists(m2)) {
-            return m2.toAbsolutePath().normalize();
-        }
-
-        return resolveRemoteArtifact(artifact, libs, downloader);
+        return java.util.Optional.empty();
     }
 
     private static Path resolveRemoteArtifact(Artifact artifact, Path libs, Downloader downloader) throws Exception {
@@ -139,6 +142,7 @@ public final class ClasspathLoader implements AutoCloseable {
             if (cached.getParent() != null) {
                 Files.createDirectories(cached.getParent());
             }
+
             Files.copy(m2, cached, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             return cached.toAbsolutePath().normalize();
         }
@@ -163,6 +167,27 @@ public final class ClasspathLoader implements AutoCloseable {
         if (!nettyCodecBase || !nettyTransport || !jlineReader) {
             throw new IllegalStateException("Runtime classpath is incomplete. Delete .kryocloud/libs and rebuild KryoCloud.");
         }
+    }
+
+    private static void validateRuntimeClasses(ClassLoader loader) throws Exception {
+        Class.forName("io.netty.handler.codec.LengthFieldBasedFrameDecoder", false, loader);
+        Class.forName("org.jline.reader.LineReader", false, loader);
+
+        Class<?> nodeType = Class.forName("eu.kryocloud.node.KryoNode", false, loader);
+        Class<?> wrapperType = Class.forName("eu.kryocloud.wrapper.KryoWrapper", false, loader);
+
+        nodeType.getMethod("running");
+        wrapperType.getMethod("running");
+    }
+
+    private static Path launcherLocation() throws Exception {
+        CodeSource source = ClasspathLoader.class.getProtectionDomain().getCodeSource();
+
+        if (source == null || source.getLocation() == null) {
+            throw new IllegalStateException("Unable to resolve KryoCloud launcher location.");
+        }
+
+        return Path.of(source.getLocation().toURI()).toAbsolutePath().normalize();
     }
 
     private static Path resolveHome() {
@@ -205,7 +230,7 @@ public final class ClasspathLoader implements AutoCloseable {
             current = current.getParent();
         }
 
-        return Path.of("").toAbsolutePath().normalize();
+        return null;
     }
 
     private static Path findHomePointer(Path start) {
