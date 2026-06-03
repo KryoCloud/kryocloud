@@ -1,8 +1,5 @@
 package eu.kryocloud.wrapper.instance;
 
-import eu.kryocloud.common.concurrency.CloudScheduler;
-import eu.kryocloud.common.concurrency.TaskKind;
-import eu.kryocloud.common.concurrency.TaskPriority;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.packet.bus.KryoPacketBus;
 import eu.kryocloud.network.packet.bus.PacketContext;
@@ -14,7 +11,6 @@ import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
 import eu.kryocloud.network.protocol.PeerType;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,21 +20,15 @@ public final class InstancePacketHandlers implements AutoCloseable {
     private static final KryoLogger LOGGER = KryoLogger.logger("Instances");
 
     private final InstanceManager instanceManager;
-    private final CloudScheduler scheduler;
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
-    public InstancePacketHandlers(InstanceManager instanceManager, CloudScheduler scheduler) {
+    public InstancePacketHandlers(InstanceManager instanceManager) {
         if (instanceManager == null) {
             throw new IllegalArgumentException("instanceManager must not be null");
         }
 
-        if (scheduler == null) {
-            throw new IllegalArgumentException("scheduler must not be null");
-        }
-
         this.instanceManager = instanceManager;
-        this.scheduler = scheduler;
     }
 
     public void register() {
@@ -59,7 +49,7 @@ public final class InstancePacketHandlers implements AutoCloseable {
             return;
         }
 
-        offload("start " + packet.serviceId(), () -> instanceManager.start(context.connection(), packet));
+        instanceManager.start(context.connection(), packet);
     }
 
     private void handleServiceStop(PacketContext context, ServiceStopRequestPacket packet) {
@@ -68,12 +58,9 @@ public final class InstancePacketHandlers implements AutoCloseable {
             return;
         }
 
-        offload("stop " + packet.serviceId(), () -> {
-            if (instanceManager.stop(context.connection(), packet).isPresent()) {
-                return;
-            }
-
+        instanceManager.stop(context.connection(), packet).orElseGet(() -> {
             LOGGER.warn("Stop requested for unknown Minecraft instance " + packet.serviceId());
+            return null;
         });
     }
 
@@ -83,7 +70,7 @@ public final class InstancePacketHandlers implements AutoCloseable {
             return;
         }
 
-        offload("command " + packet.serviceId(), () -> instanceManager.command(context.connection(), packet));
+        instanceManager.command(context.connection(), packet);
     }
 
     private void handleServiceLogs(PacketContext context, ServiceLogsRequestPacket packet) {
@@ -92,8 +79,9 @@ public final class InstancePacketHandlers implements AutoCloseable {
             return;
         }
 
-        offload("logs " + packet.serviceId(), () -> instanceManager.logs(context.connection(), packet));
+        instanceManager.logs(context.connection(), packet);
     }
+
 
     private void handleServiceCleanup(PacketContext context, ServiceCleanupRequestPacket packet) {
         if (!isNodeConnection(context)) {
@@ -101,16 +89,7 @@ public final class InstancePacketHandlers implements AutoCloseable {
             return;
         }
 
-        offload("cleanup " + packet.requestId(), () -> instanceManager.cleanup(context.connection(), packet));
-    }
-
-    private void offload(String name, Runnable work) {
-        scheduler.run(TaskKind.BLOCKING_IO, "instance " + name, TaskPriority.HIGH, Duration.ofMinutes(10), work)
-                .future()
-                .exceptionally(error -> {
-                    LOGGER.warn("Instance task failed: " + error.getMessage());
-                    return null;
-                });
+        instanceManager.cleanup(context.connection(), packet);
     }
 
     private boolean isNodeConnection(PacketContext context) {

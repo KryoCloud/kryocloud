@@ -46,6 +46,7 @@ public final class ConsoleIntro {
         context.print("");
         context.print("  " + Tone.PRIMARY.paint(Glyph.SNOWFLAKE.value()) + "  " + Tone.FROST.paint("KryoCloud console ready"));
         context.print("  " + Tone.MUTED.paint("type ") + ConsoleTheme.code("help") + Tone.MUTED.paint(" to explore commands"));
+        context.print("  " + Tone.MUTED.paint("press ") + ConsoleTheme.code("CTRL+C") + Tone.MUTED.paint(" twice within 5s to shutdown"));
         context.print("");
     }
 

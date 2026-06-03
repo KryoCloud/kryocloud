@@ -15,6 +15,8 @@ import eu.kryocloud.api.plugin.event.lifecycle.CloudReadyEvent;
 import eu.kryocloud.api.plugin.event.lifecycle.CloudStoppingEvent;
 import eu.kryocloud.api.plugin.event.maintenance.MaintenanceDisabledEvent;
 import eu.kryocloud.api.plugin.event.maintenance.MaintenanceEnabledEvent;
+import eu.kryocloud.api.plugin.event.network.NetworkCacheChangedEvent;
+import eu.kryocloud.api.plugin.event.network.NetworkChannelMessageEvent;
 import eu.kryocloud.api.plugin.event.remote.RemoteCloudEvent;
 import eu.kryocloud.api.plugin.event.service.ServiceCommandSentEvent;
 import eu.kryocloud.api.plugin.event.service.ServiceFailedEvent;
@@ -37,6 +39,11 @@ import eu.kryocloud.api.plugin.event.wrapper.WrapperHeartbeatEvent;
 import eu.kryocloud.api.plugin.event.wrapper.WrapperStateChangedEvent;
 import eu.kryocloud.api.plugin.internal.mapper.SnapshotMapper;
 import eu.kryocloud.api.plugin.internal.protocol.payload.Payload;
+import eu.kryocloud.api.plugin.messaging.PluginChannel;
+import eu.kryocloud.api.plugin.network.NetworkCacheChangeType;
+import eu.kryocloud.api.plugin.network.NetworkCacheEntry;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.Map;
 
 public final class RemoteEventMapper {
@@ -164,7 +171,32 @@ public final class RemoteEventMapper {
             return new MaintenanceDisabledEvent();
         }
 
+        if (event.equals(NetworkChannelMessageEvent.class.getName())) {
+            return new NetworkChannelMessageEvent(
+                    PluginChannel.parse(payload.getOrDefault("channel", "kryocloud:unknown")),
+                    Base64.getDecoder().decode(payload.getOrDefault("payload", "")),
+                    payload.getOrDefault("sourcePlugin", ""),
+                    payload.getOrDefault("sourceService", ""),
+                    payload.getOrDefault("sourceGroup", ""),
+                    payload.getOrDefault("sourceWrapper", ""),
+                    instant(payload.get("createdAt"))
+            );
+        }
+
+        if (event.equals(NetworkCacheChangedEvent.class.getName())) {
+            NetworkCacheChangeType type = SnapshotMapper.enumValue(NetworkCacheChangeType.class, payload.get("changeType"), NetworkCacheChangeType.PUT);
+            return new NetworkCacheChangedEvent(type, NetworkCacheEntry.fromPayload(payload));
+        }
+
         return new RemoteCloudEvent(route, payload);
+    }
+
+    private static Instant instant(String value) {
+        try {
+            return value == null || value.isBlank() ? Instant.now() : Instant.parse(value);
+        } catch (Exception ignored) {
+            return Instant.now();
+        }
     }
 
     private static Map<String, String> prefixed(Map<String, String> payload, String prefix) {

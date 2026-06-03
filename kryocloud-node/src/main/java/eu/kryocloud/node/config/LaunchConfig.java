@@ -4,6 +4,7 @@ import eu.kryocloud.common.config.Comment;
 import eu.kryocloud.common.config.Config;
 
 import java.nio.file.Path;
+import eu.kryocloud.common.config.ConfigPathResolver;
 
 public class LaunchConfig extends Config {
 
@@ -22,14 +23,15 @@ public class LaunchConfig extends Config {
     @Comment("Port to bind the node protocol to")
     private int port = 1130;
 
-    @Comment("Host to bind the future web dashboard to")
-    private String webHost = "127.0.0.1";
-
-    @Comment("Port to bind the future web dashboard to")
-    private int webPort = 8080;
 
     @Comment("File extension for files created by the node")
     private String fileExtension = ".yaml";
+
+    @Comment("Whether the config format setup question has been answered")
+    private boolean configFormatConfigured = false;
+
+    @Comment("Internal setup version for the config format migration")
+    private int configFormatSetupVersion = 0;
 
     @Comment("Update channel for the node")
     private String updateChannel = "stable";
@@ -81,28 +83,29 @@ public class LaunchConfig extends Config {
         this.port = port;
     }
 
-    public String getWebHost() {
-        return webHost;
-    }
-
-    public void setWebHost(String webHost) {
-        this.webHost = webHost;
-    }
-
-    public int getWebPort() {
-        return webPort;
-    }
-
-    public void setWebPort(int webPort) {
-        this.webPort = webPort;
-    }
 
     public String getFileExtension() {
         return fileExtension;
     }
 
+    public boolean isConfigFormatConfigured() {
+        return configFormatConfigured;
+    }
+
+    public void setConfigFormatConfigured(boolean configFormatConfigured) {
+        this.configFormatConfigured = configFormatConfigured;
+    }
+
+    public int getConfigFormatSetupVersion() {
+        return configFormatSetupVersion;
+    }
+
+    public void setConfigFormatSetupVersion(int configFormatSetupVersion) {
+        this.configFormatSetupVersion = configFormatSetupVersion;
+    }
+
     public void setFileExtension(String fileExtension) {
-        this.fileExtension = fileExtension;
+        this.fileExtension = ConfigPathResolver.normalizeExtension(fileExtension);
     }
 
     public String getUpdateChannel() {

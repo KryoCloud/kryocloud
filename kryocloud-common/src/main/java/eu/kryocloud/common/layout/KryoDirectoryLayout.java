@@ -79,7 +79,7 @@ public final class KryoDirectoryLayout {
         TEMPLATES = normalizedRoot.resolve("templates");
         STORAGE = normalizedRoot.resolve("storage");
         VERSIONS = STORAGE.resolve("versions");
-        GROUPS = CONFIG.resolve("groups");
+        GROUPS = normalizedRoot.resolve("groups");
     }
 
     public static synchronized void persistHomePointer(Path root) {
@@ -144,6 +144,7 @@ public final class KryoDirectoryLayout {
         create(ROOT);
         create(CONFIG);
         create(GROUPS);
+        migrateLegacyGroupsDirectory();
         create(ADDONS);
         create(JDK);
         create(TEMPLATES);
@@ -159,6 +160,36 @@ public final class KryoDirectoryLayout {
         create(TEMPLATES);
         create(TMP);
         create(STATIC);
+    }
+
+    private static void migrateLegacyGroupsDirectory() {
+        Path legacy = CONFIG.resolve("groups");
+
+        if (!Files.isDirectory(legacy)) {
+            return;
+        }
+
+        try {
+            create(GROUPS);
+
+            try (var paths = Files.list(legacy)) {
+                paths.filter(Files::isRegularFile).forEach(path -> moveLegacyGroupConfig(path, GROUPS.resolve(path.getFileName())));
+            }
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to migrate legacy group configs from " + legacy + " to " + GROUPS, exception);
+        }
+    }
+
+    private static void moveLegacyGroupConfig(Path source, Path target) {
+        try {
+            if (Files.exists(target)) {
+                return;
+            }
+
+            Files.move(source, target);
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to move legacy group config " + source + " to " + target, exception);
+        }
     }
 
     private static Path findHomePointer() {

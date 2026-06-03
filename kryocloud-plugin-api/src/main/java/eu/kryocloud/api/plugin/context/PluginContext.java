@@ -7,6 +7,7 @@ import eu.kryocloud.api.plugin.event.IEventBus;
 import eu.kryocloud.api.plugin.identity.CloudServiceIdentity;
 import eu.kryocloud.api.plugin.logging.IPluginLogger;
 import eu.kryocloud.api.plugin.messaging.IPluginMessenger;
+import eu.kryocloud.api.plugin.network.ICloudNetwork;
 import eu.kryocloud.api.plugin.scheduler.IPluginScheduler;
 import java.nio.file.Path;
 
@@ -21,6 +22,8 @@ public interface PluginContext {
     IEventBus events();
 
     IPluginMessenger messages();
+
+    ICloudNetwork network();
 
     IPluginScheduler scheduler();
 

@@ -16,6 +16,10 @@ import eu.kryocloud.api.plugin.event.IEventBus;
 import eu.kryocloud.api.plugin.identity.CloudServiceIdentity;
 import eu.kryocloud.api.plugin.logging.IPluginLogger;
 import eu.kryocloud.api.plugin.messaging.IPluginMessenger;
+import eu.kryocloud.api.plugin.messaging.PluginChannel;
+import eu.kryocloud.api.plugin.network.ICloudNetwork;
+import eu.kryocloud.api.plugin.network.ICloudNetworkChannel;
+import eu.kryocloud.api.plugin.network.INetworkCache;
 import eu.kryocloud.api.plugin.scheduler.IPluginScheduler;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -138,6 +142,22 @@ public final class CloudAPI {
 
     public static IPluginMessenger messages() {
         return context().messages();
+    }
+
+    public static ICloudNetwork network() {
+        return context().network();
+    }
+
+    public static ICloudNetworkChannel channel(String namespace, String name) {
+        return network().channel(namespace, name);
+    }
+
+    public static ICloudNetworkChannel channel(PluginChannel channel) {
+        return network().channel(channel);
+    }
+
+    public static INetworkCache cache() {
+        return network().cache();
     }
 
     public static IPluginScheduler scheduler() {

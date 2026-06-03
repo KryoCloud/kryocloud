@@ -63,9 +63,29 @@ public final class WrapperPluginGatewayServer implements AutoCloseable {
             return;
         }
 
+        try {
+            ServerSocket server = new ServerSocket();
+            server.bind(new InetSocketAddress(host, port));
+            serverSocket = server;
+        } catch (Throwable throwable) {
+            running.set(false);
+            throw new IllegalStateException("Plugin API gateway could not bind to " + host + ":" + port, throwable);
+        }
+
         subscriptions.add(KryoPacketBus.listen(PluginGatewayResponsePacket.class, this::handleResponse));
         subscriptions.add(KryoPacketBus.listen(PluginGatewayEventPacket.class, this::handleEvent));
+        LOGGER.success("Plugin API listening on " + host + ":" + boundPort());
         executor.execute(this::acceptLoop);
+    }
+
+    public int boundPort() {
+        ServerSocket socket = serverSocket;
+
+        if (socket == null || socket.getLocalPort() <= 0) {
+            return port;
+        }
+
+        return socket.getLocalPort();
     }
 
     @Override
@@ -97,11 +117,13 @@ public final class WrapperPluginGatewayServer implements AutoCloseable {
     }
 
     private void acceptLoop() {
-        try (ServerSocket server = new ServerSocket()) {
-            server.bind(new InetSocketAddress(host, port));
-            serverSocket = server;
-            LOGGER.success("Plugin API listening on " + host + ":" + port);
+        ServerSocket server = serverSocket;
 
+        if (server == null) {
+            return;
+        }
+
+        try {
             while (running.get()) {
                 Socket socket = server.accept();
                 socket.setTcpNoDelay(true);

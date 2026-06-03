@@ -701,11 +701,24 @@ public final class InstanceManager implements IInstanceManager {
     }
 
     private void sendState(KryoConnection connection, ServiceStartRequestPacket packet, CloudServiceState state, String message) {
-        connection.send(new ServiceStatePacket(packet.serviceId(), packet.groupName(), packet.serviceType(), state, wrapperId, advertisedAddress, packet.port(), normalizeMessage(message)));
+        sendState(connection, new ServiceStatePacket(packet.serviceId(), packet.groupName(), packet.serviceType(), state, wrapperId, advertisedAddress, packet.port(), normalizeMessage(message)));
     }
 
     private void sendState(KryoConnection connection, InstanceSnapshot snapshot, CloudServiceState state, String message) {
-        connection.send(new ServiceStatePacket(snapshot.serviceId(), snapshot.groupName(), snapshot.serviceType(), state, wrapperId, advertisedAddress, snapshot.port(), normalizeMessage(message)));
+        sendState(connection, new ServiceStatePacket(snapshot.serviceId(), snapshot.groupName(), snapshot.serviceType(), state, wrapperId, advertisedAddress, snapshot.port(), normalizeMessage(message)));
+    }
+
+    private void sendState(KryoConnection connection, ServiceStatePacket packet) {
+        if (connection == null || !connection.isActive()) {
+            LOGGER.warn("Skipped service state " + packet.state() + " for " + packet.serviceId() + " because node connection is not active.");
+            return;
+        }
+
+        try {
+            connection.send(packet);
+        } catch (Exception exception) {
+            LOGGER.warn("Failed to send service state " + packet.state() + " for " + packet.serviceId() + ": " + exception.getMessage());
+        }
     }
 
     private String normalizeMessage(String message) {

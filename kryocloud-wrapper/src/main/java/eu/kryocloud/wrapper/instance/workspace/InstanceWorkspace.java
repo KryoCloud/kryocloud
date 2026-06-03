@@ -381,20 +381,23 @@ public final class InstanceWorkspace {
 
     private void writeVelocityConfig(ServiceStartRequestPacket packet, Path workingDirectory) throws IOException {
         Path config = workingDirectory.resolve("velocity.toml");
-        String content = read(config);
-
-        if (content.isBlank()) {
-            content = "bind = \"" + packet.bindAddress() + ":" + packet.port() + "\"\n"
-                    + "online-mode = true\n"
-                    + "player-info-forwarding-mode = \"modern\"\n"
-                    + "forwarding-secret-file = \"forwarding.secret\"\n\n"
-                    + "[servers]\n";
-        }
-
-        content = upsertToml(content, "bind", "\"" + packet.bindAddress() + ":" + packet.port() + "\"");
-        content = upsertToml(content, "online-mode", "true");
-        content = upsertToml(content, "player-info-forwarding-mode", "\"modern\"");
-        content = upsertToml(content, "forwarding-secret-file", "\"forwarding.secret\"");
+        String content = "config-version = \"2.7\"\n"
+                + "bind = \"" + packet.bindAddress() + ":" + packet.port() + "\"\n"
+                + "motd = \"KryoCloud Proxy\"\n"
+                + "show-max-players = 100\n"
+                + "online-mode = true\n"
+                + "force-key-authentication = true\n"
+                + "prevent-client-proxy-connections = false\n"
+                + "player-info-forwarding-mode = \"modern\"\n"
+                + "forwarding-secret-file = \"forwarding.secret\"\n"
+                + "announce-forge = false\n"
+                + "kick-existing-players = false\n"
+                + "ping-passthrough = \"DISABLED\"\n"
+                + "enable-player-address-logging = true\n\n"
+                + "[servers]\n"
+                + "lobby = \"127.0.0.1:1\"\n"
+                + "try = [\"lobby\"]\n\n"
+                + "[forced-hosts]\n";
 
         Files.writeString(config, content);
         Files.writeString(workingDirectory.resolve("forwarding.secret"), packet.forwardingSecret() + System.lineSeparator());
@@ -402,32 +405,29 @@ public final class InstanceWorkspace {
 
     private void writeBungeeConfig(ServiceStartRequestPacket packet, Path workingDirectory) throws IOException {
         Path config = workingDirectory.resolve("config.yml");
-        String content = read(config);
+        String content = "online_mode: true\n"
+                + "ip_forward: true\n"
+                + "listeners:\n"
+                + "- query_port: " + packet.port() + "\n"
+                + "  motd: KryoCloud Proxy\n"
+                + "  tab_list: GLOBAL_PING\n"
+                + "  query_enabled: false\n"
+                + "  proxy_protocol: false\n"
+                + "  forced_hosts: {}\n"
+                + "  ping_passthrough: false\n"
+                + "  priorities:\n"
+                + "  - lobby\n"
+                + "  bind_local_address: true\n"
+                + "  host: " + packet.bindAddress() + ":" + packet.port() + "\n"
+                + "  max_players: 100\n"
+                + "  tab_size: 60\n"
+                + "  force_default_server: true\n"
+                + "servers:\n"
+                + "  lobby:\n"
+                + "    motd: KryoCloud bootstrap\n"
+                + "    address: 127.0.0.1:1\n"
+                + "    restricted: false\n";
 
-        if (content.isBlank()) {
-            content = "online_mode: true\n"
-                    + "ip_forward: true\n"
-                    + "listeners:\n"
-                    + "- query_port: " + packet.port() + "\n"
-                    + "  motd: KryoCloud Proxy\n"
-                    + "  tab_list: GLOBAL_PING\n"
-                    + "  query_enabled: false\n"
-                    + "  proxy_protocol: false\n"
-                    + "  forced_hosts: {}\n"
-                    + "  ping_passthrough: false\n"
-                    + "  priorities:\n"
-                    + "  - lobby\n"
-                    + "  bind_local_address: true\n"
-                    + "  host: " + packet.bindAddress() + ":" + packet.port() + "\n"
-                    + "  max_players: 100\n"
-                    + "  tab_size: 60\n"
-                    + "  force_default_server: false\n"
-                    + "servers: {}\n";
-        }
-
-        content = upsertYamlRoot(content, "online_mode", "true");
-        content = upsertYamlRoot(content, "ip_forward", "true");
-        content = replaceOrAppend(content, "(?m)^(\\s*host:\\s*).*$", "$1" + packet.bindAddress() + ":" + packet.port(), "  host: " + packet.bindAddress() + ":" + packet.port());
         Files.writeString(config, content);
     }
 

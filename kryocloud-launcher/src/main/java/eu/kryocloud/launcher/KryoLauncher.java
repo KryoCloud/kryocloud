@@ -4,15 +4,12 @@ import eu.kryocloud.launcher.argument.LauncherArguments;
 import eu.kryocloud.launcher.argument.LauncherMode;
 import eu.kryocloud.launcher.classpath.ClasspathLoader;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 
 public final class KryoLauncher {
-
-    private static final String NODE_CLASS = "eu.kryocloud.node.KryoNode";
-    private static final String WRAPPER_CLASS = "eu.kryocloud.wrapper.KryoWrapper";
 
     private KryoLauncher() {
     }
@@ -34,38 +31,154 @@ public final class KryoLauncher {
         }
     }
 
-    private static void launch(LauncherMode mode) {
-        Path projectRoot = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        Path cache = projectRoot.resolve(".kryocloud").resolve("libs");
-        ClasspathLoader loader = new ClasspathLoader(projectRoot, cache, mode);
-        List<Object> instances = new ArrayList<>();
-        AtomicBoolean closed = new AtomicBoolean(false);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> close(loader, instances, closed), "kryocloud-launcher-shutdown"));
-
-        switch (mode) {
-            case NODE -> instances.add(loader.create(NODE_CLASS));
-            case WRAPPER -> instances.add(loader.create(WRAPPER_CLASS));
-            case ALL -> {
-                instances.add(loader.create(NODE_CLASS));
-                instances.add(loader.create(WRAPPER_CLASS));
+    private static void launch(LauncherMode mode) throws Exception {
+        try (ClasspathLoader loader = ClasspathLoader.create()) {
+            switch (mode) {
+                case NODE -> launchNode(loader);
+                case WRAPPER -> launchWrapper(loader);
+                case ALL -> launchAll(loader);
             }
         }
     }
 
-    private static void close(ClasspathLoader loader, List<Object> instances, AtomicBoolean closed) {
+    private static void launchNode(ClasspathLoader loader) throws Exception {
+        Object node = loader.create("eu.kryocloud.node.KryoNode");
+        AtomicBoolean closed = new AtomicBoolean(false);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> close(loader, node, closed), "kryocloud-node-shutdown"));
+
+        try (InterruptShutdownGuard ignored = InterruptShutdownGuard.install(() -> close(loader, node, closed))) {
+            waitWhileRunning(loader, node);
+        } finally {
+            close(loader, node, closed);
+        }
+    }
+
+    private static void launchWrapper(ClasspathLoader loader) throws Exception {
+        Object wrapper = loader.create("eu.kryocloud.wrapper.KryoWrapper");
+        AtomicBoolean closed = new AtomicBoolean(false);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> close(loader, wrapper, closed), "kryocloud-wrapper-shutdown"));
+
+        try {
+            waitWhileRunning(loader, wrapper);
+        } finally {
+            close(loader, wrapper, closed);
+        }
+    }
+
+    private static void launchAll(ClasspathLoader loader) throws Exception {
+        Object node = loader.create("eu.kryocloud.node.KryoNode");
+        Object wrapper = loader.create("eu.kryocloud.wrapper.KryoWrapper");
+        AtomicBoolean closed = new AtomicBoolean(false);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeAll(loader, wrapper, node, closed), "kryocloud-local-shutdown"));
+
+        try (InterruptShutdownGuard ignored = InterruptShutdownGuard.install(() -> closeAll(loader, wrapper, node, closed))) {
+            waitWhileRunning(loader, node);
+        } finally {
+            closeAll(loader, wrapper, node, closed);
+        }
+    }
+
+    private static void waitWhileRunning(ClasspathLoader loader, Object instance) throws Exception {
+        while (isRunning(loader, instance)) {
+            LockSupport.parkNanos(Duration.ofMillis(250).toNanos());
+        }
+    }
+
+    private static boolean isRunning(ClasspathLoader loader, Object instance) throws Exception {
+        if (instance == null) {
+            return false;
+        }
+
+        Object value = loader.invokeResult(instance, "running");
+
+        if (value instanceof Boolean active) {
+            return active;
+        }
+
+        return false;
+    }
+
+    private static void close(ClasspathLoader loader, Object instance, AtomicBoolean closed) {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
 
-        for (int index = instances.size() - 1; index >= 0; index--) {
-            loader.shutdown(instances.get(index));
+        closeQuietly(loader, instance);
+    }
+
+    private static void closeAll(ClasspathLoader loader, Object wrapper, Object node, AtomicBoolean closed) {
+        if (!closed.compareAndSet(false, true)) {
+            return;
         }
 
+        closeQuietly(loader, wrapper);
+        closeQuietly(loader, node);
+    }
+
+    private static void closeQuietly(ClasspathLoader loader, Object instance) {
         try {
-            loader.close();
-        } catch (Exception exception) {
-            System.err.println("Failed to close launcher classpath: " + exception.getMessage());
+            loader.invoke(instance, "shutdown");
+        } catch (Exception ignored) {
+        }
+    }
+
+
+    private static final class InterruptShutdownGuard implements AutoCloseable {
+
+        private static final long CONFIRM_WINDOW_MILLIS = 5_000L;
+
+        private final AtomicLong lastInterruptAtMillis = new AtomicLong(0L);
+        private final Runnable shutdown;
+        private final sun.misc.Signal signal;
+        private final sun.misc.SignalHandler previous;
+        private final boolean installed;
+
+        private InterruptShutdownGuard(Runnable shutdown, sun.misc.Signal signal, sun.misc.SignalHandler previous, boolean installed) {
+            this.shutdown = shutdown;
+            this.signal = signal;
+            this.previous = previous;
+            this.installed = installed;
+        }
+
+        static InterruptShutdownGuard install(Runnable shutdown) {
+            try {
+                sun.misc.Signal signal = new sun.misc.Signal("INT");
+                InterruptShutdownGuard guard = new InterruptShutdownGuard(shutdown, signal, null, true);
+                sun.misc.SignalHandler previous = sun.misc.Signal.handle(signal, ignored -> guard.handleInterrupt());
+                return new InterruptShutdownGuard(shutdown, signal, previous, true);
+            } catch (Throwable ignored) {
+                return new InterruptShutdownGuard(shutdown, null, null, false);
+            }
+        }
+
+        private void handleInterrupt() {
+            long now = System.currentTimeMillis();
+            long previousAt = lastInterruptAtMillis.getAndSet(now);
+
+            if (previousAt < 1 || now - previousAt > CONFIRM_WINDOW_MILLIS) {
+                System.out.println();
+                System.out.println("❄ Press CTRL+C again within 5 seconds to shutdown KryoCloud.");
+                return;
+            }
+
+            System.out.println();
+            System.out.println("❄ Shutting down KryoCloud...");
+            shutdown.run();
+        }
+
+        @Override
+        public void close() {
+            if (!installed || signal == null || previous == null) {
+                return;
+            }
+
+            try {
+                sun.misc.Signal.handle(signal, previous);
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -79,7 +192,6 @@ public final class KryoLauncher {
         System.out.println("  java -jar kryocloud-launcher.jar all");
         System.out.println();
         System.out.println("Default mode: all");
-        System.out.println("Dependency cache: .kryocloud/libs");
     }
 
 }

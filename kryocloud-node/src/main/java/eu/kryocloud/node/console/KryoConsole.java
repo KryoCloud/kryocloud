@@ -89,7 +89,12 @@ public final class KryoConsole implements AutoCloseable {
     }
 
     private void runConsole() {
-        try (Terminal terminal = TerminalBuilder.builder().system(true).build()) {
+        ConsoleOutput.prepareInteractiveConsole();
+
+        try (Terminal terminal = TerminalBuilder.builder()
+                .system(true)
+                .nativeSignals(false)
+                .build()) {
             KryoCompleter completer = new KryoCompleter(new KryoCommandCompleter(node, commandRegistry));
             LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).history(new DefaultHistory()).completer(completer).build();
             prepareHistory(activeReader);

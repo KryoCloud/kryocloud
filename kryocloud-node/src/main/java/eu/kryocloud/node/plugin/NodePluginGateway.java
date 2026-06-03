@@ -2,6 +2,8 @@ package eu.kryocloud.node.plugin;
 
 import eu.kryocloud.api.group.IGroup;
 import eu.kryocloud.api.template.ITemplate;
+import eu.kryocloud.api.plugin.event.network.NetworkCacheChangedEvent;
+import eu.kryocloud.api.plugin.event.network.NetworkChannelMessageEvent;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.manifest.SoftwareManifest;
 import eu.kryocloud.common.manifest.SoftwareVersion;
@@ -34,12 +36,16 @@ import eu.kryocloud.node.wrapper.WrapperSnapshot;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class NodePluginGateway implements AutoCloseable {
@@ -55,6 +61,8 @@ public final class NodePluginGateway implements AutoCloseable {
     private final NetworkAddressConfig networkAddressConfig;
     private final AtomicBoolean maintenance = new AtomicBoolean(false);
     private final AtomicBoolean registered = new AtomicBoolean(false);
+    private final AtomicLong networkCacheVersions = new AtomicLong();
+    private final ConcurrentMap<String, NetworkCacheValue> networkCache = new ConcurrentHashMap<>();
     private final List<PacketSubscription> subscriptions = new ArrayList<>();
 
     public NodePluginGateway(NodeWrapperRegistry wrapperRegistry, eu.kryocloud.node.service.runtime.NodeServiceRegistry serviceRegistry, NodeServiceScheduler serviceScheduler, GroupManager groupManager, TemplateManager templateManager, NodeVersionStorage versionStorage, NetworkAddressConfig networkAddressConfig) {
@@ -182,6 +190,11 @@ public final class NodePluginGateway implements AutoCloseable {
             case "maintenance.disable" -> maintenanceDisable();
             case "cloud.stats" -> stats();
             case "cloud.shutdown" -> cloudShutdown(packet.payload());
+            case "network.message.publish" -> networkMessagePublish(packet);
+            case "network.cache.put" -> networkCachePut(packet);
+            case "network.cache.get" -> networkCacheGet(packet.payload());
+            case "network.cache.remove" -> networkCacheRemove(packet);
+            case "network.cache.keys" -> networkCacheKeys(packet.payload());
             case "console.commands" -> consoleCommands();
             case "console.suggest" -> consoleSuggest(packet.payload());
             case "console.execute" -> consoleExecute(packet.payload());
@@ -1418,12 +1431,179 @@ public final class NodePluginGateway implements AutoCloseable {
     }
 
 
-    private void publish(String route, String service, String group, String wrapper, Map<String, String> payload) {
+
+    private Map<String, String> networkMessagePublish(PluginGatewayRequestPacket packet) {
+        Map<String, String> payload = packet.payload();
+        String channel = required(payload, "channel");
+        String data = payload.getOrDefault("payload", "");
+        validateBase64(data, "payload");
+
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("channel", channel);
+        values.put("payload", data);
+        values.put("sourcePlugin", packet.pluginId());
+        values.put("sourceService", packet.serviceId());
+        values.put("sourceGroup", sourceGroup(packet));
+        values.put("sourceWrapper", packet.wrapperId());
+        values.put("createdAt", Instant.now().toString());
+
+        int receivers = publish(NetworkChannelMessageEvent.class.getName(), target(payload, "targetService"), target(payload, "targetGroup"), target(payload, "targetWrapper"), values);
+        return Map.of("published", "true", "receivers", String.valueOf(receivers));
+    }
+
+    private Map<String, String> networkCachePut(PluginGatewayRequestPacket packet) {
+        Map<String, String> payload = packet.payload();
+        String key = networkKey(required(payload, "key"));
+        String value = payload.getOrDefault("value", "");
+        validateBase64(value, "value");
+
+        long ttlMillis = Math.max(0L, longValue(payload, "ttlMillis", 0L));
+        Instant now = Instant.now();
+        String expiresAt = ttlMillis <= 0L ? "" : now.plusMillis(ttlMillis).toString();
+        NetworkCacheValue entry = new NetworkCacheValue(
+                key,
+                value,
+                payload.getOrDefault("contentType", "application/octet-stream"),
+                networkCacheVersions.incrementAndGet(),
+                now.toString(),
+                expiresAt,
+                packet.pluginId(),
+                packet.serviceId(),
+                sourceGroup(packet),
+                packet.wrapperId()
+        );
+
+        networkCache.put(key, entry);
+        Map<String, String> values = entry.payload("true", "PUT");
+        publish(NetworkCacheChangedEvent.class.getName(), target(payload, "targetService"), target(payload, "targetGroup"), target(payload, "targetWrapper"), values);
+        return values;
+    }
+
+    private Map<String, String> networkCacheGet(Map<String, String> payload) {
+        String key = networkKey(required(payload, "key"));
+        NetworkCacheValue entry = cacheEntry(key);
+
+        if (entry == null) {
+            return Map.of("present", "false", "key", key);
+        }
+
+        return entry.payload("true", "PUT");
+    }
+
+    private Map<String, String> networkCacheRemove(PluginGatewayRequestPacket packet) {
+        Map<String, String> payload = packet.payload();
+        String key = networkKey(required(payload, "key"));
+        NetworkCacheValue removed = networkCache.remove(key);
+
+        if (removed == null) {
+            return Map.of("removed", "false", "key", key);
+        }
+
+        Map<String, String> values = removed.payload("false", "REMOVE");
+        publish(NetworkCacheChangedEvent.class.getName(), target(payload, "targetService"), target(payload, "targetGroup"), target(payload, "targetWrapper"), values);
+        return Map.of("removed", "true", "key", key, "version", String.valueOf(removed.version()));
+    }
+
+    private Map<String, String> networkCacheKeys(Map<String, String> payload) {
+        String prefix = payload.getOrDefault("prefix", "");
+        List<String> keys = networkCache.keySet().stream()
+                .filter(key -> key.startsWith(prefix))
+                .filter(key -> cacheEntry(key) != null)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+
+        return stringList("keys", keys);
+    }
+
+    private NetworkCacheValue cacheEntry(String key) {
+        NetworkCacheValue entry = networkCache.get(key);
+
+        if (entry == null) {
+            return null;
+        }
+
+        if (!entry.expired()) {
+            return entry;
+        }
+
+        if (networkCache.remove(key, entry)) {
+            publish(NetworkCacheChangedEvent.class.getName(), "", "", "", entry.payload("false", "EXPIRE"));
+        }
+
+        return null;
+    }
+
+    private String sourceGroup(PluginGatewayRequestPacket packet) {
+        if (packet.serviceId() == null || packet.serviceId().isBlank()) {
+            return "";
+        }
+
+        return serviceRegistry.service(packet.serviceId()).map(NodeServiceSnapshot::groupName).orElse("");
+    }
+
+    private String target(Map<String, String> payload, String key) {
+        String value = payload.get(key);
+        return value == null ? "" : value.trim();
+    }
+
+    private String networkKey(String key) {
+        String value = key == null ? "" : key.trim();
+
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("key must not be blank");
+        }
+
+        if (value.length() > 256) {
+            throw new IllegalArgumentException("key must not be longer than 256 characters");
+        }
+
+        return value;
+    }
+
+    private void validateBase64(String value, String field) {
+        try {
+            Base64.getDecoder().decode(value == null ? "" : value);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(field + " must be valid base64", exception);
+        }
+    }
+
+    private long longValue(Map<String, String> payload, String key, long fallback) {
+        try {
+            return Long.parseLong(payload.getOrDefault(key, String.valueOf(fallback)));
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private int publish(String route, String service, String group, String wrapper, Map<String, String> payload) {
         PluginGatewayEventPacket packet = new PluginGatewayEventPacket(UUID.randomUUID(), route, service == null ? "" : service, group == null ? "" : group, wrapper == null ? "" : wrapper, payload);
 
-        for (WrapperSnapshot snapshot : wrapperRegistry.wrappers()) {
-            wrapperRegistry.connection(snapshot.wrapperId()).ifPresent(connection -> connection.send(packet));
+        if (wrapper != null && !wrapper.isBlank()) {
+            Optional<KryoConnection> connection = wrapperRegistry.connection(wrapper);
+
+            if (connection.isEmpty()) {
+                return 0;
+            }
+
+            connection.get().send(packet);
+            return 1;
         }
+
+        int sent = 0;
+
+        for (WrapperSnapshot snapshot : wrapperRegistry.wrappers()) {
+            Optional<KryoConnection> connection = wrapperRegistry.connection(snapshot.wrapperId());
+
+            if (connection.isEmpty()) {
+                continue;
+            }
+
+            connection.get().send(packet);
+            sent++;
+        }
+
+        return sent;
     }
 
     private Map<String, String> servicePayload(NodeServiceSnapshot service) {
@@ -1534,6 +1714,40 @@ public final class NodePluginGateway implements AutoCloseable {
         } catch (Exception exception) {
             throw new RuntimeException("Could not copy template directory", exception);
         }
+    }
+
+
+    private record NetworkCacheValue(String key, String value, String contentType, long version, String updatedAt, String expiresAt, String sourcePlugin, String sourceService, String sourceGroup, String sourceWrapper) {
+
+        boolean expired() {
+            if (expiresAt == null || expiresAt.isBlank()) {
+                return false;
+            }
+
+            try {
+                return Instant.parse(expiresAt).isBefore(Instant.now());
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
+
+        Map<String, String> payload(String present, String changeType) {
+            Map<String, String> values = new LinkedHashMap<>();
+            values.put("present", present == null ? "true" : present);
+            values.put("changeType", changeType == null || changeType.isBlank() ? "PUT" : changeType);
+            values.put("key", key);
+            values.put("value", value);
+            values.put("contentType", contentType);
+            values.put("version", String.valueOf(version));
+            values.put("updatedAt", updatedAt);
+            values.put("expiresAt", expiresAt == null ? "" : expiresAt);
+            values.put("sourcePlugin", sourcePlugin);
+            values.put("sourceService", sourceService);
+            values.put("sourceGroup", sourceGroup);
+            values.put("sourceWrapper", sourceWrapper);
+            return Map.copyOf(values);
+        }
+
     }
 
 }

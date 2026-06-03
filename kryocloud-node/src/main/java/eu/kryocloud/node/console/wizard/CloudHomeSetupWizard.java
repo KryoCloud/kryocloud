@@ -37,7 +37,7 @@ public final class CloudHomeSetupWizard {
     private void printHeader() {
         System.out.println();
         System.out.println("❄ KryoCloud storage setup");
-        System.out.println("Choose where KryoCloud should store config, templates, versions, tmp, static services and .jdk runtimes.");
+        System.out.println("Choose where KryoCloud should store config, groups, templates, versions, tmp, static services and .jdk runtimes.");
         System.out.println("The " + KryoDirectoryLayout.homePointer().getFileName() + " pointer will be written to: " + KryoDirectoryLayout.homePointer().toAbsolutePath().normalize());
         System.out.println();
     }

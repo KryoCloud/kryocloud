@@ -8,6 +8,7 @@ import eu.kryocloud.api.plugin.event.IEventBus;
 import eu.kryocloud.api.plugin.identity.CloudServiceIdentity;
 import eu.kryocloud.api.plugin.logging.IPluginLogger;
 import eu.kryocloud.api.plugin.messaging.IPluginMessenger;
+import eu.kryocloud.api.plugin.network.ICloudNetwork;
 import eu.kryocloud.api.plugin.scheduler.IPluginScheduler;
 import java.nio.file.Path;
 
@@ -18,17 +19,19 @@ public final class RemotePluginContext implements PluginContext {
     private final IPluginCloud cloud;
     private final IEventBus events;
     private final IPluginMessenger messages;
+    private final ICloudNetwork network;
     private final IPluginScheduler scheduler;
     private final IPluginLogger logger;
     private final Path dataDirectory;
     private final CloudPluginSession session;
 
-    public RemotePluginContext(PluginDescription description, CloudServiceIdentity identity, IPluginCloud cloud, IEventBus events, IPluginMessenger messages, IPluginScheduler scheduler, IPluginLogger logger, Path dataDirectory, CloudPluginSession session) {
+    public RemotePluginContext(PluginDescription description, CloudServiceIdentity identity, IPluginCloud cloud, IEventBus events, IPluginMessenger messages, ICloudNetwork network, IPluginScheduler scheduler, IPluginLogger logger, Path dataDirectory, CloudPluginSession session) {
         this.description = description;
         this.identity = identity;
         this.cloud = cloud;
         this.events = events;
         this.messages = messages;
+        this.network = network;
         this.scheduler = scheduler;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
@@ -58,6 +61,11 @@ public final class RemotePluginContext implements PluginContext {
     @Override
     public IPluginMessenger messages() {
         return messages;
+    }
+
+    @Override
+    public ICloudNetwork network() {
+        return network;
     }
 
     @Override

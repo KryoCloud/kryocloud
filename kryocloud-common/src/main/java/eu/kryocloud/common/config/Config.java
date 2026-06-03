@@ -11,8 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class Config implements IConfig {
 
-    private final Path file;
-    private final IConfigTypeProvider provider;
+    private Path file;
+    private IConfigTypeProvider provider;
     private final Map<String, Object> defaults = new ConcurrentHashMap<>();
 
     public Config(Path file) {
@@ -20,9 +20,7 @@ public abstract class Config implements IConfig {
             throw new IllegalArgumentException("file must not be null");
         }
 
-        this.file = file;
-        ConfigType type = ConfigType.fromFileName(file.getFileName().toString());
-        this.provider = type.getTypeProvider();
+        retarget(file);
     }
 
     @Override
@@ -86,8 +84,34 @@ public abstract class Config implements IConfig {
         return provider;
     }
 
+    public synchronized void moveTo(Path target, boolean deletePrevious) {
+        Path previous = file;
+        retarget(target);
+        save();
+
+        if (!deletePrevious || previous == null || previous.equals(target)) {
+            return;
+        }
+
+        try {
+            java.nio.file.Files.deleteIfExists(previous);
+        } catch (Exception exception) {
+            throw new RuntimeException("Failed to delete old config file: " + previous, exception);
+        }
+    }
+
     public Path file() {
         return file;
+    }
+
+    private void retarget(Path target) {
+        if (target == null) {
+            throw new IllegalArgumentException("target must not be null");
+        }
+
+        this.file = target;
+        ConfigType type = ConfigType.fromFileName(target.getFileName().toString());
+        this.provider = type.getTypeProvider();
     }
 
     @Override

@@ -25,8 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -97,47 +95,6 @@ public final class NodeServiceScheduler {
         return new ServiceStartResult(requestId, plan.serviceId(), wrapper.wrapperId());
     }
 
-    private List<ServiceStartResult> startBatch(List<ServiceStartPlan> plans) {
-        Map<String, Integer> reservedMemory = new HashMap<>();
-        List<ServiceStartResult> results = new ArrayList<>();
-
-        for (ServiceStartPlan plan : plans) {
-            ServiceStartResult result = start(plan, reservedMemory);
-            results.add(result);
-            reservedMemory.merge(result.wrapperId(), plan.maxMemoryMb(), Integer::sum);
-        }
-
-        return List.copyOf(results);
-    }
-
-    private ServiceStartResult start(ServiceStartPlan plan, Map<String, Integer> reservedMemory) {
-        if (plan == null) {
-            throw new IllegalArgumentException("plan must not be null");
-        }
-
-        if (reservedMemory == null) {
-            throw new IllegalArgumentException("reservedMemory must not be null");
-        }
-
-        Optional<WrapperSnapshot> optionalWrapper = selectWrapper(plan, reservedMemory);
-
-        if (optionalWrapper.isEmpty()) {
-            throw new IllegalStateException("No available wrapper found for service " + plan.serviceId());
-        }
-
-        WrapperSnapshot wrapper = optionalWrapper.get();
-        Optional<KryoConnection> optionalConnection = wrapperRegistry.connection(wrapper.wrapperId());
-
-        if (optionalConnection.isEmpty()) {
-            throw new IllegalStateException("Selected wrapper " + wrapper.wrapperId() + " has no active connection");
-        }
-
-        UUID requestId = UUID.randomUUID();
-        optionalConnection.get().send(new ServiceStartRequestPacket(requestId, plan.serviceId(), plan.groupName(), plan.templateName(), plan.javaVersion(), plan.bindAddress(), plan.serviceType(), plan.port(), plan.maxMemoryMb(), plan.staticService(), plan.onlineMode(), plan.forwardingMode(), plan.forwardingSecret()));
-
-        return new ServiceStartResult(requestId, plan.serviceId(), wrapper.wrapperId());
-    }
-
     public List<ServiceStartResult> startGroup(String groupName, int count) {
         validateGroupName(groupName);
 
@@ -153,7 +110,14 @@ public final class NodeServiceScheduler {
 
         ensureGroupSoftware(group);
 
-        return startBatch(plansFromGroup(group, count));
+        List<ServiceStartPlan> plans = plansFromGroup(group, count);
+        List<ServiceStartResult> results = new ArrayList<>();
+
+        for (ServiceStartPlan plan : plans) {
+            results.add(start(plan));
+        }
+
+        return List.copyOf(results);
     }
 
     public List<ServiceStartResult> reconcileMinimumServices() {
@@ -192,27 +156,6 @@ public final class NodeServiceScheduler {
 
         LOGGER.info("Auto-starting " + missingServices + " Minecraft service(s) for group " + group.name());
         return startGroup(group.name(), missingServices);
-    }
-
-    public boolean stopService(String serviceId, String reason, boolean force) {
-        validateGroupName(serviceId);
-
-        Optional<NodeServiceSnapshot> optionalService = serviceRegistry.service(serviceId);
-
-        if (optionalService.isEmpty()) {
-            return false;
-        }
-
-        NodeServiceSnapshot service = optionalService.get();
-        Optional<KryoConnection> connection = wrapperRegistry.connection(service.wrapperId());
-
-        if (connection.isEmpty()) {
-            return false;
-        }
-
-        String safeReason = reason == null || reason.isBlank() ? "KryoCloud service stop" : reason;
-        connection.get().send(new ServiceStopRequestPacket(UUID.randomUUID(), service.serviceId(), force, safeReason));
-        return true;
     }
 
     public int stopGroup(String groupName, String reason, boolean force) {
@@ -276,36 +219,17 @@ public final class NodeServiceScheduler {
     }
 
     public Optional<WrapperSnapshot> selectWrapper(ServiceStartPlan plan) {
-        return selectWrapper(plan, Map.of());
-    }
-
-    private Optional<WrapperSnapshot> selectWrapper(ServiceStartPlan plan, Map<String, Integer> reservedMemory) {
         if (plan == null) {
             throw new IllegalArgumentException("plan must not be null");
         }
 
-        if (reservedMemory == null) {
-            throw new IllegalArgumentException("reservedMemory must not be null");
+        List<WrapperSnapshot> candidates = wrapperRegistry.availableWrappersForMemory(plan.maxMemoryMb());
+
+        if (candidates.isEmpty()) {
+            return Optional.empty();
         }
 
-        return wrapperRegistry.availableWrappers().stream()
-                .filter(wrapper -> availableMemory(wrapper, reservedMemory) >= plan.maxMemoryMb())
-                .min(Comparator.comparingLong(wrapper -> wrapperScore(wrapper, plan, reservedMemory)));
-    }
-
-    private int availableMemory(WrapperSnapshot wrapper, Map<String, Integer> reservedMemory) {
-        return Math.max(0, wrapper.availableMemoryMb() - reservedMemory.getOrDefault(wrapper.wrapperId(), 0));
-    }
-
-    private long wrapperScore(WrapperSnapshot wrapper, ServiceStartPlan plan, Map<String, Integer> reservedMemory) {
-        long reserved = reservedMemory.getOrDefault(wrapper.wrapperId(), 0);
-        long projectedUsed = wrapper.usedMemoryMb() + reserved + plan.maxMemoryMb();
-        long memoryPressure = projectedUsed * 1000L / Math.max(1, wrapper.maxMemoryMb());
-        long cpuPressure = wrapper.cpuLoadPermille();
-        long servicePressure = wrapper.runningServices() * 75L;
-        long coreBonus = wrapper.availableProcessors() * 25L;
-
-        return memoryPressure + cpuPressure + servicePressure - coreBonus;
+        return Optional.of(candidates.getFirst());
     }
 
     private void ensureGroupSoftware(IGroup group) {

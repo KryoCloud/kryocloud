@@ -3,8 +3,8 @@ package eu.kryocloud.wrapper;
 import eu.kryocloud.api.config.IConfigProvider;
 import eu.kryocloud.api.screen.IScreenManager;
 import eu.kryocloud.api.wrapper.IWrapper;
+import eu.kryocloud.common.config.ConfigPathResolver;
 import eu.kryocloud.common.config.ConfigProvider;
-import eu.kryocloud.common.concurrency.CloudScheduler;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocolClient;
@@ -25,10 +25,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class KryoWrapper implements IWrapper {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("Wrapper");
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     private IConfigProvider configProvider;
     private WrapperLaunchConfig launchConfig;
@@ -38,7 +41,6 @@ public final class KryoWrapper implements IWrapper {
     private InstancePacketHandlers instancePacketHandlers;
     private WrapperHeartbeatTask heartbeatTask;
     private WrapperPluginGatewayServer pluginGatewayServer;
-    private CloudScheduler scheduler;
     private ScheduledExecutorService heartbeatExecutor;
 
     public KryoWrapper() {
@@ -46,12 +48,17 @@ public final class KryoWrapper implements IWrapper {
     }
 
     public void start() {
+        if (!running.compareAndSet(false, true)) {
+            return;
+        }
+
         try {
             KryoDirectoryLayout.bootstrap();
             KryoDirectoryLayout.ensureWrapperDirectories();
 
             configProvider = new ConfigProvider();
-            launchConfig = configProvider.registerConfig(KryoDirectoryLayout.CONFIG.resolve("wrapper.cfg"), WrapperLaunchConfig.class);
+            launchConfig = configProvider.registerConfig(ConfigPathResolver.resolve(KryoDirectoryLayout.CONFIG, "wrapper"), WrapperLaunchConfig.class);
+            migrateLegacyPluginApiPort(launchConfig);
 
             String wrapperId = requireNonBlank(launchConfig.getWrapperId(), "wrapperId");
             String nodeHost = requireNonBlank(launchConfig.getNodeHost(), "nodeHost");
@@ -61,21 +68,25 @@ public final class KryoWrapper implements IWrapper {
             Path javaRuntimesDirectory = runtimeDirectory(requireNonBlank(launchConfig.getJavaRuntimesDirectory(), "javaRuntimesDirectory"));
 
             validatePort(launchConfig.getNodePort(), "nodePort");
-            validatePort(launchConfig.getPluginApiPort(), "pluginApiPort");
+            validatePortOrAuto(launchConfig.getPluginApiPort(), "pluginApiPort");
             validatePositive(launchConfig.getMaxMemoryMb(), "maxMemoryMb");
             validatePositive(launchConfig.getStartupProbeSeconds(), "startupProbeSeconds");
             validatePositive(launchConfig.getShutdownTimeoutSeconds(), "shutdownTimeoutSeconds");
 
-            scheduler = new CloudScheduler();
             screenManager = new ScreenManager();
             InstanceWorkspace workspace = new InstanceWorkspace(KryoDirectoryLayout.TEMPLATES, KryoDirectoryLayout.TMP, KryoDirectoryLayout.STATIC, KryoDirectoryLayout.ADDONS);
             JavaRuntimeResolver javaRuntimeResolver = new JavaRuntimeResolver(javaRuntimesDirectory, Duration.ofSeconds(3));
-            instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, launchConfig.getPluginApiPort(), screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
-            instancePacketHandlers = new InstancePacketHandlers(instanceManager, scheduler);
-            instancePacketHandlers.register();
 
             protocolClient = new KryoProtocolClient(nodeHost, launchConfig.getNodePort());
             KryoConnection nodeConnection = protocolClient.connect(PeerType.WRAPPER, wrapperId, token, Duration.ofSeconds(10));
+
+            pluginGatewayServer = new WrapperPluginGatewayServer(pluginApiHost, launchConfig.getPluginApiPort(), wrapperId, protocolClient);
+            pluginGatewayServer.start();
+            int effectivePluginApiPort = pluginGatewayServer.boundPort();
+
+            instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, effectivePluginApiPort, screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
+            instancePacketHandlers = new InstancePacketHandlers(instanceManager);
+            instancePacketHandlers.register();
 
             protocolClient.send(new WrapperRegisterPacket(wrapperId, hostname(), advertisedAddress, System.getProperty("os.name"), Runtime.getRuntime().availableProcessors(), launchConfig.getMaxMemoryMb()));
 
@@ -84,9 +95,6 @@ public final class KryoWrapper implements IWrapper {
                 thread.setDaemon(true);
                 return thread;
             });
-
-            pluginGatewayServer = new WrapperPluginGatewayServer(pluginApiHost, launchConfig.getPluginApiPort(), wrapperId, protocolClient);
-            pluginGatewayServer.start();
 
             heartbeatTask = new WrapperHeartbeatTask(wrapperId, protocolClient, instanceManager, heartbeatExecutor, launchConfig.getMaxMemoryMb());
             heartbeatTask.start();
@@ -99,6 +107,10 @@ public final class KryoWrapper implements IWrapper {
     }
 
     public void shutdown() {
+        if (!running.getAndSet(false)) {
+            return;
+        }
+
         if (heartbeatTask != null) {
             heartbeatTask.close();
             heartbeatTask = null;
@@ -129,11 +141,6 @@ public final class KryoWrapper implements IWrapper {
             protocolClient = null;
         }
 
-        if (scheduler != null) {
-            scheduler.close();
-            scheduler = null;
-        }
-
         screenManager = null;
 
         if (configProvider != null) {
@@ -142,6 +149,10 @@ public final class KryoWrapper implements IWrapper {
         }
 
         launchConfig = null;
+    }
+
+    public boolean running() {
+        return running.get();
     }
 
     public IScreenManager screenManager() {
@@ -159,6 +170,16 @@ public final class KryoWrapper implements IWrapper {
     public static void main(String[] args) {
         KryoWrapper wrapper = new KryoWrapper();
         Runtime.getRuntime().addShutdownHook(new Thread(wrapper::shutdown, "kryocloud-wrapper-shutdown"));
+    }
+
+    private void migrateLegacyPluginApiPort(WrapperLaunchConfig launchConfig) {
+        if (launchConfig.getPluginApiPort() != 7070) {
+            return;
+        }
+
+        launchConfig.setPluginApiPort(0);
+        launchConfig.save();
+        LOGGER.info("Migrated legacy pluginApiPort 7070 to auto-bind port 0.");
     }
 
     private Path runtimeDirectory(String configuredDirectory) {
@@ -204,6 +225,12 @@ public final class KryoWrapper implements IWrapper {
     private void validatePort(int value, String name) {
         if (value < 1 || value > 65_535) {
             throw new IllegalArgumentException(name + " must be between 1 and 65535");
+        }
+    }
+
+    private void validatePortOrAuto(int value, String name) {
+        if (value < 0 || value > 65_535) {
+            throw new IllegalArgumentException(name + " must be 0 or between 1 and 65535");
         }
     }
 

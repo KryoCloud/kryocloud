@@ -14,7 +14,6 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
         <launcher.mainClass>eu.kryocloud.launcher.KryoLauncher</launcher.mainClass>
     </properties>
 

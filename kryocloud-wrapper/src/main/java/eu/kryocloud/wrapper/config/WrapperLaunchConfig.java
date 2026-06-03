@@ -34,8 +34,8 @@ public final class WrapperLaunchConfig extends Config {
     @Comment("Local host used by Minecraft plugins to connect to the KryoCloud plugin API")
     private String pluginApiHost = "127.0.0.1";
 
-    @Comment("Local port used by Minecraft plugins to connect to the KryoCloud plugin API")
-    private int pluginApiPort = 7070;
+    @Comment("Local port used by Minecraft plugins to connect to the KryoCloud plugin API. Use 0 to bind a free local port automatically.")
+    private int pluginApiPort = 0;
 
     @Comment("Seconds the wrapper waits for Minecraft readiness log output before marking a service as RUNNING")
     private int startupProbeSeconds = 90;

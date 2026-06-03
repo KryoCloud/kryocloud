@@ -20,6 +20,18 @@ public final class ConsoleOutput {
     private ConsoleOutput() {
     }
 
+    public static void prepareInteractiveConsole() {
+        LOCK.lock();
+
+        try {
+            clearTransientLine();
+            lineReader = null;
+            transientLineActive = false;
+        } finally {
+            LOCK.unlock();
+        }
+    }
+
     public static void attach(LineReader reader) {
         if (reader == null) {
             throw new IllegalArgumentException("reader must not be null");
