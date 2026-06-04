@@ -30,7 +30,7 @@
         <jline.version>3.30.5</jline.version>
         <snakeyaml.version>2.6</snakeyaml.version>
         <tomlj.version>1.1.1</tomlj.version>
-        <json.version>20251224</json.version>
+        <json.version>20260522</json.version>
         <fastutil.version>8.5.18</fastutil.version>
         <slf4j.version>2.0.17</slf4j.version>
     </properties>
