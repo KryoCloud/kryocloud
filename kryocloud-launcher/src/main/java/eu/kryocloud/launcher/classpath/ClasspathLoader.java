@@ -38,7 +38,9 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("org.jline", "jline-reader", "3.30.5"),
             artifact("org.jline", "jline-terminal", "3.30.5"),
             artifact("org.jline", "jline-terminal-jna", "3.30.5"),
+            artifact("org.jline", "jline-terminal-jansi", "3.30.5"),
             artifact("net.java.dev.jna", "jna", "5.18.1"),
+            artifact("org.fusesource.jansi", "jansi", "2.4.2"),
             artifact("org.slf4j", "slf4j-api", "2.0.17"),
             artifact("io.netty", "netty-common", "4.2.10.Final"),
             artifact("io.netty", "netty-buffer", "4.2.10.Final"),
@@ -181,8 +183,13 @@ public final class ClasspathLoader implements AutoCloseable {
         boolean nettyCodecBase = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("netty-codec-base-"));
         boolean nettyTransport = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("netty-transport-"));
         boolean jlineReader = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-reader-"));
+        boolean jlineTerminal = classpath.stream().anyMatch(path -> {
+            String name = path.getFileName().toString();
+            return name.startsWith("jline-terminal-") && !name.startsWith("jline-terminal-jna-") && !name.startsWith("jline-terminal-jansi-");
+        });
+        boolean jlineJna = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-terminal-jna-"));
 
-        if (!nettyCodecBase || !nettyTransport || !jlineReader) {
+        if (!nettyCodecBase || !nettyTransport || !jlineReader || !jlineTerminal || !jlineJna) {
             throw new IllegalStateException("Runtime classpath is incomplete. Delete .kryocloud/libs and rebuild KryoCloud.");
         }
     }
@@ -194,6 +201,9 @@ public final class ClasspathLoader implements AutoCloseable {
         Class.forName("io.netty.buffer.FreeChunkEvent", false, loader);
         Class.forName("io.netty.channel.socket.ChannelInputShutdownReadComplete", false, loader);
         Class.forName("org.jline.reader.LineReader", false, loader);
+        Class.forName("org.jline.terminal.TerminalBuilder", false, loader);
+        Class.forName("com.sun.jna.Library", false, loader);
+        Class.forName("org.fusesource.jansi.AnsiConsole", false, loader);
 
         Class<?> nodeType = Class.forName("eu.kryocloud.node.KryoNode", false, loader);
         Class<?> wrapperType = Class.forName("eu.kryocloud.wrapper.KryoWrapper", false, loader);

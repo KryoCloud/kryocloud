@@ -2,14 +2,7 @@ package eu.kryocloud.sphere;
 
 import java.util.List;
 
-public record KryoSphereLaunchPlan(
-        KryoSphereMode requestedMode,
-        KryoSphereMode effectiveMode,
-        KryoSpherePlatform platform,
-        String backend,
-        String command,
-        List<String> warnings
-) {
+public record KryoSphereLaunchPlan(KryoSphereMode requestedMode, KryoSphereMode effectiveMode, KryoSpherePlatform platform, String backend, String command, List<String> warnings) {
 
     public KryoSphereLaunchPlan(KryoSphereMode requestedMode, KryoSphereMode effectiveMode, KryoSpherePlatform platform, String command, List<String> warnings) {
         this(requestedMode, effectiveMode, platform, effectiveMode == KryoSphereMode.STRICT ? "bubblewrap" : "basic", command, warnings);

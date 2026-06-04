@@ -9,6 +9,7 @@ import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocolClient;
 import eu.kryocloud.sphere.KryoSphereMode;
+import eu.kryocloud.sphere.KryoSpherePlatform;
 import eu.kryocloud.sphere.KryoSphereSettings;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.wrapper.WrapperRegisterPacket;
@@ -57,7 +58,6 @@ public final class KryoWrapper implements IWrapper {
         }
 
         try {
-            requireLinuxHost();
             KryoDirectoryLayout.bootstrap();
             KryoDirectoryLayout.ensureWrapperDirectories();
 
@@ -156,16 +156,6 @@ public final class KryoWrapper implements IWrapper {
         launchConfig = null;
     }
 
-    private void requireLinuxHost() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-
-        if (os.contains("linux")) {
-            return;
-        }
-
-        throw new IllegalStateException("KryoWrapper currently supports Linux only. Detected OS: " + System.getProperty("os.name"));
-    }
-
     public boolean running() {
         return running.get();
     }
@@ -198,8 +188,16 @@ public final class KryoWrapper implements IWrapper {
     }
 
     private KryoSphereSettings sphereSettings(WrapperLaunchConfig config) {
+        KryoSphereMode mode = KryoSphereMode.parse(config.getKryoSphereMode());
+        KryoSpherePlatform platform = KryoSpherePlatform.current();
+
+        if (platform != KryoSpherePlatform.LINUX && mode != KryoSphereMode.NONE) {
+            LOGGER.warn("KryoSphere isolation is only supported on Linux. Running on " + platform + ", so KryoSphere is disabled for this wrapper runtime.");
+            return KryoSphereSettings.disabled();
+        }
+
         return new KryoSphereSettings(
-                KryoSphereMode.parse(config.getKryoSphereMode()),
+                mode,
                 config.isKryoSphereBubblewrap(),
                 config.isKryoSpherePrivateTmp(),
                 config.isKryoSphereProtectHome(),

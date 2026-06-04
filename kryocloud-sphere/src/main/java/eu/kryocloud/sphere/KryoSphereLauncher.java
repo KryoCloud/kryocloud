@@ -44,7 +44,7 @@ public final class KryoSphereLauncher {
         KryoSphereSettings safeSettings = settings == null ? KryoSphereSettings.basic() : settings;
 
         if (platform != KryoSpherePlatform.LINUX) {
-            throw new IllegalStateException("KryoCloud currently supports Linux services only. Detected platform: " + platform);
+            return platformPlainPlan(spec, safeSettings);
         }
 
         if (safeSettings.mode() == KryoSphereMode.NONE) {
@@ -56,6 +56,36 @@ public final class KryoSphereLauncher {
         }
 
         return unixBasicPlan(spec, safeSettings, KryoSphereMode.BASIC, List.of());
+    }
+
+    private KryoSphereLaunchPlan platformPlainPlan(KryoSphereServiceSpec spec, KryoSphereSettings settings) {
+        List<String> warnings = List.of("KryoSphere isolation is only supported on Linux. Isolation disabled on " + platform + ".");
+
+        if (platform == KryoSpherePlatform.WINDOWS) {
+            return windowsPlainPlan(spec, settings, warnings);
+        }
+
+        return unixBasicPlan(spec, KryoSphereSettings.disabled(), KryoSphereMode.NONE, warnings);
+    }
+
+    private KryoSphereLaunchPlan windowsPlainPlan(KryoSphereServiceSpec spec, KryoSphereSettings settings, List<String> warnings) {
+        List<String> commands = new ArrayList<>();
+
+        commands.add("if not exist " + windowsQuote(spec.workingDirectory().resolve("logs")) + " mkdir " + windowsQuote(spec.workingDirectory().resolve("logs")));
+        commands.add("if not exist " + windowsQuote(spec.workingDirectory().resolve(".kryocloud")) + " mkdir " + windowsQuote(spec.workingDirectory().resolve(".kryocloud")));
+
+        for (String warning : warnings) {
+            if (warning == null || warning.isBlank()) {
+                continue;
+            }
+
+            commands.add("echo " + windowsSafeEcho("[KryoSphere] " + warning) + " >> " + windowsQuote(spec.logFile()));
+        }
+
+        commands.add("cd /d " + windowsQuote(spec.workingDirectory()));
+        commands.add(windowsJavaCommand(spec) + " >> " + windowsQuote(spec.logFile()) + " 2>&1");
+
+        return new KryoSphereLaunchPlan(settings.mode(), KryoSphereMode.NONE, platform, "plain", String.join(" & ", commands), warnings);
     }
 
     private KryoSphereLaunchPlan unixStrictPlan(KryoSphereServiceSpec spec, KryoSphereSettings settings) {
@@ -203,6 +233,26 @@ public final class KryoSphereLauncher {
         }
 
         return commands;
+    }
+
+    private String windowsJavaCommand(KryoSphereServiceSpec spec) {
+        StringJoiner joiner = new StringJoiner(" ");
+        joiner.add(windowsQuote(spec.javaExecutable()));
+        joiner.add("-Xms" + spec.minMemoryMb() + "M");
+        joiner.add("-Xmx" + spec.maxMemoryMb() + "M");
+
+        for (String argument : spec.jvmArgs()) {
+            if (argument == null || argument.isBlank()) {
+                continue;
+            }
+
+            joiner.add(windowsQuote(argument));
+        }
+
+        joiner.add("-jar");
+        joiner.add(windowsQuote(spec.jarName()));
+        joiner.add("nogui");
+        return joiner.toString();
     }
 
     private String unixJavaCommand(KryoSphereServiceSpec spec, String sandboxWorkspace, KryoSphereSettings settings) {
@@ -379,6 +429,31 @@ public final class KryoSphereLauncher {
         }
 
         return normalized.substring(0, 63).replaceAll("-$", "");
+    }
+
+    private String windowsQuote(Path path) {
+        return windowsQuote(path.toAbsolutePath().normalize().toString());
+    }
+
+    private String windowsQuote(String value) {
+        if (value == null || value.isBlank()) {
+            return "\"\"";
+        }
+
+        return "\"" + value.replace("\"", "\\\"") + "\"";
+    }
+
+    private String windowsSafeEcho(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+
+        return value
+                .replace("^", "^^")
+                .replace("&", "^&")
+                .replace("<", "^<")
+                .replace(">", "^>")
+                .replace("|", "^|");
     }
 
     private String shellQuote(Path path) {

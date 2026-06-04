@@ -33,8 +33,6 @@ public final class KryoLauncher {
     }
 
     private static void launch(LauncherMode mode) throws Exception {
-        requireLinuxHost();
-
         ClasspathLoader loader = ClasspathLoader.create();
         Thread.currentThread().setContextClassLoader(loader.classLoader());
 
@@ -43,16 +41,6 @@ public final class KryoLauncher {
             case WRAPPER -> launchWrapper(loader);
             case ALL -> launchAll(loader);
         }
-    }
-
-    private static void requireLinuxHost() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-
-        if (os.contains("linux")) {
-            return;
-        }
-
-        throw new IllegalStateException("KryoCloud currently supports Linux only. Detected OS: " + System.getProperty("os.name"));
     }
 
     private static void launchNode(ClasspathLoader loader) throws Exception {

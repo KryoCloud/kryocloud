@@ -3,17 +3,7 @@ package eu.kryocloud.sphere;
 import java.nio.file.Path;
 import java.util.List;
 
-public record KryoSphereServiceSpec(
-        String serviceId,
-        String javaExecutable,
-        Path workingDirectory,
-        int minMemoryMb,
-        int maxMemoryMb,
-        List<String> jvmArgs,
-        String jarName,
-        Path logFile,
-        Path pidFile
-) {
+public record KryoSphereServiceSpec(String serviceId, String javaExecutable, Path workingDirectory, int minMemoryMb, int maxMemoryMb, List<String> jvmArgs, String jarName, Path logFile, Path pidFile) {
 
     public KryoSphereServiceSpec {
         if (serviceId == null || serviceId.isBlank()) {

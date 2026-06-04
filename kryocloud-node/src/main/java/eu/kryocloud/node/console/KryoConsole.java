@@ -7,6 +7,7 @@ import eu.kryocloud.node.KryoNode;
 import eu.kryocloud.node.console.tui.ConsoleIntro;
 import eu.kryocloud.node.console.tui.KryoPrompt;
 import org.jline.reader.EndOfFileException;
+import org.jline.reader.History;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
@@ -90,14 +91,15 @@ public final class KryoConsole implements AutoCloseable {
 
     private void runConsole() {
         ConsoleOutput.prepareInteractiveConsole();
+        Thread.currentThread().setContextClassLoader(KryoConsole.class.getClassLoader());
 
-        try (Terminal terminal = TerminalBuilder.builder()
-                .system(true)
-                .nativeSignals(false)
-                .build()) {
+        try (Terminal terminal = createTerminal()) {
             KryoCompleter completer = new KryoCompleter(new KryoCommandCompleter(node, commandRegistry));
-            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser()).history(new DefaultHistory()).completer(completer).build();
-            prepareHistory(activeReader);
+            Path historyFile = historyFile();
+            DefaultHistory history = new DefaultHistory();
+            LineReader activeReader = LineReaderBuilder.builder().terminal(terminal).parser(createParser()).history(history).completer(completer).variable(LineReader.HISTORY_FILE, historyFile).variable(LineReader.HISTORY_SIZE, 10_000).variable(LineReader.LIST_MAX, 100).build();
+            configureReader(activeReader);
+            loadHistory(history);
             ConsoleContext context = new ConsoleContext(node, terminal, activeReader, running, completer);
 
             reader = activeReader;
@@ -110,21 +112,72 @@ public final class KryoConsole implements AutoCloseable {
                 readAndExecute(context, activeReader);
             }
 
+            saveHistory(activeReader.getHistory());
             ConsoleOutput.detach(activeReader);
         } catch (Exception exception) {
             LOGGER.error("Console crashed", exception);
         }
     }
 
-    private void prepareHistory(LineReader activeReader) {
+    private Terminal createTerminal() throws Exception {
+        try {
+            TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
+            setBoolean(builder, "jna", true);
+            setBoolean(builder, "jansi", true);
+            setBoolean(builder, "dumb", false);
+            return builder.build();
+        } catch (Exception exception) {
+            LOGGER.warn("Native terminal unavailable, falling back to a dumb terminal. History arrows and TAB completion may be limited: " + exception.getMessage());
+            TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
+            setBoolean(builder, "dumb", true);
+            return builder.build();
+        }
+    }
+
+    private void setBoolean(TerminalBuilder builder, String method, boolean value) {
+        try {
+            builder.getClass().getMethod(method, boolean.class).invoke(builder, value);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private DefaultParser createParser() {
+        DefaultParser parser = new DefaultParser();
+        parser.setEofOnUnclosedQuote(false);
+        return parser;
+    }
+
+    private Path historyFile() {
         try {
             Path historyFile = KryoDirectoryLayout.CONFIG.resolve("console.history");
             Files.createDirectories(historyFile.getParent());
-            activeReader.setVariable(LineReader.HISTORY_FILE, historyFile);
-            activeReader.option(LineReader.Option.HISTORY_IGNORE_DUPS, true);
-            activeReader.option(LineReader.Option.HISTORY_REDUCE_BLANKS, true);
+            return historyFile;
         } catch (Exception exception) {
             LOGGER.warn("Failed to prepare console history: " + exception.getMessage());
+            return Path.of(".kryocloud-console.history").toAbsolutePath().normalize();
+        }
+    }
+
+    private void configureReader(LineReader activeReader) {
+        activeReader.option(LineReader.Option.HISTORY_IGNORE_DUPS, true);
+        activeReader.option(LineReader.Option.HISTORY_REDUCE_BLANKS, true);
+        activeReader.option(LineReader.Option.AUTO_LIST, true);
+        activeReader.option(LineReader.Option.AUTO_MENU, true);
+        activeReader.option(LineReader.Option.COMPLETE_IN_WORD, true);
+        activeReader.option(LineReader.Option.DISABLE_EVENT_EXPANSION, true);
+    }
+
+    private void loadHistory(History history) {
+        try {
+            history.load();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveHistory(History history) {
+        try {
+            history.save();
+        } catch (Exception ignored) {
         }
     }
 
