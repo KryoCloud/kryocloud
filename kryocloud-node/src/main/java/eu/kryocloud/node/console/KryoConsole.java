@@ -127,7 +127,7 @@ public final class KryoConsole implements AutoCloseable {
             setBoolean(builder, "dumb", false);
             return builder.build();
         } catch (Exception exception) {
-            LOGGER.warn("Native terminal unavailable, falling back to a dumb terminal. History arrows and TAB completion may be limited: " + exception.getMessage());
+            LOGGER.info("Using limited terminal mode: " + exception.getMessage());
             TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
             setBoolean(builder, "dumb", true);
             return builder.build();

@@ -25,7 +25,7 @@ public final class GroupSetupWizard {
         String bindAddress = askBindAddress(context, serviceType);
         String onlineMode = askOnlineMode(context, serviceType);
         String forwardingMode = askForwardingMode(context, serviceType);
-        printAvailableSoftware(context);
+        printAvailableSoftware(context, serviceType);
         String software = askSoftware(context, serviceType);
         printAvailableVersions(context, software);
         String softwareVersion = askSoftwareVersion(context, software);
@@ -103,10 +103,11 @@ public final class GroupSetupWizard {
         context.success("Materialized template " + config.getTemplateName());
     }
 
-    private void printAvailableSoftware(ConsoleContext context) {
-        List<String> software = context.node().versionStorage().availableSoftware();
+    private void printAvailableSoftware(ConsoleContext context, String serviceType) {
+        List<String> software = context.node().versionStorage().availableSoftware(serviceType);
 
         if (software.isEmpty()) {
+            context.warn("No software manifests available for service type " + serviceType + ".");
             return;
         }
 
@@ -115,13 +116,10 @@ public final class GroupSetupWizard {
 
     private void printAvailableVersions(ConsoleContext context, String software) {
         try {
+            var manifest = context.node().versionStorage().manifest(software);
             List<String> versions = context.node().versionStorage().availableVersions(software);
 
-            if (versions.isEmpty()) {
-                return;
-            }
-
-            context.print("  Latest: " + versions.getFirst());
+            context.print("  Latest: " + manifest.latestVersion());
             context.print("  Versions: " + String.join(", ", versions.stream().limit(8).toList()));
         } catch (Exception exception) {
             context.warn("Could not fetch versions for " + software + ": " + exception.getMessage());
@@ -208,7 +206,12 @@ public final class GroupSetupWizard {
     }
 
     private String askSoftware(ConsoleContext context, String serviceType) {
-        List<String> software = context.node().versionStorage().availableSoftware();
+        List<String> software = context.node().versionStorage().availableSoftware(serviceType);
+
+        if (software.isEmpty()) {
+            throw new IllegalStateException("No software manifests available for service type " + serviceType);
+        }
+
         return context.ask("Minecraft software:", defaultSoftware(context, serviceType), software);
     }
 
@@ -277,14 +280,14 @@ public final class GroupSetupWizard {
     }
 
     private String defaultSoftware(ConsoleContext context, String serviceType) {
-        List<String> software = context.node().versionStorage().availableSoftware();
+        List<String> software = context.node().versionStorage().availableSoftware(serviceType);
 
         if ("PROXY".equals(serviceType) && software.stream().anyMatch(entry -> entry.equalsIgnoreCase("velocity"))) {
             return "velocity";
         }
 
-        if ("PROXY".equals(serviceType) && software.stream().anyMatch(entry -> entry.equalsIgnoreCase("flamecord"))) {
-            return "flamecord";
+        if ("PROXY".equals(serviceType) && software.stream().anyMatch(entry -> entry.equalsIgnoreCase("bungeecord"))) {
+            return "bungeecord";
         }
 
         if (software.stream().anyMatch(entry -> entry.equalsIgnoreCase("paper"))) {

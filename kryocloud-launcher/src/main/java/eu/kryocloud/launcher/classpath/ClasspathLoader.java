@@ -39,9 +39,11 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("org.jline", "jline-terminal", "3.30.5"),
             artifact("org.jline", "jline-terminal-jna", "3.30.5"),
             artifact("org.jline", "jline-terminal-jansi", "3.30.5"),
+            artifact("org.jline", "jline-terminal-ffm", "3.30.5"),
             artifact("net.java.dev.jna", "jna", "5.18.1"),
             artifact("org.fusesource.jansi", "jansi", "2.4.2"),
             artifact("org.slf4j", "slf4j-api", "2.0.17"),
+            artifact("org.slf4j", "slf4j-nop", "2.0.17"),
             artifact("io.netty", "netty-common", "4.2.10.Final"),
             artifact("io.netty", "netty-buffer", "4.2.10.Final"),
             artifact("io.netty", "netty-resolver", "4.2.10.Final"),
@@ -188,8 +190,9 @@ public final class ClasspathLoader implements AutoCloseable {
             return name.startsWith("jline-terminal-") && !name.startsWith("jline-terminal-jna-") && !name.startsWith("jline-terminal-jansi-");
         });
         boolean jlineJna = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-terminal-jna-"));
+        boolean slf4jNop = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("slf4j-nop-"));
 
-        if (!nettyCodecBase || !nettyTransport || !jlineReader || !jlineTerminal || !jlineJna) {
+        if (!nettyCodecBase || !nettyTransport || !jlineReader || !jlineTerminal || !jlineJna || !slf4jNop) {
             throw new IllegalStateException("Runtime classpath is incomplete. Delete .kryocloud/libs and rebuild KryoCloud.");
         }
     }

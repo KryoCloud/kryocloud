@@ -32,6 +32,7 @@
         <tomlj.version>1.1.1</tomlj.version>
         <json.version>20251224</json.version>
         <fastutil.version>8.5.18</fastutil.version>
+        <slf4j.version>2.0.17</slf4j.version>
     </properties>
 
     <repositories>
@@ -43,6 +44,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-nop</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>

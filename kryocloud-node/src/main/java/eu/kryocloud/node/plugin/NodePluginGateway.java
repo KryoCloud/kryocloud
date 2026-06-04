@@ -7,6 +7,7 @@ import eu.kryocloud.api.plugin.event.network.NetworkChannelMessageEvent;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.SoftwareManifest;
+import eu.kryocloud.common.manifest.ManifestVersionComparator;
 import eu.kryocloud.common.manifest.SoftwareVersion;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.connection.KryoConnection;
@@ -971,7 +972,7 @@ public final class NodePluginGateway implements AutoCloseable {
         lines.add("Type: " + manifest.type().name());
         lines.add("Latest: " + manifest.latestVersion());
 
-        for (String version : manifest.versions().keySet().stream().sorted(java.util.Comparator.reverseOrder()).toList()) {
+        for (String version : ManifestVersionComparator.sortNewestFirst(manifest.versions().keySet())) {
             SoftwareVersion softwareVersion = manifest.versions().get(version);
             lines.add(version + " • Java " + softwareVersion.javaVersion() + " • " + softwareVersion.javaFlags().size() + " JVM flag(s)");
         }

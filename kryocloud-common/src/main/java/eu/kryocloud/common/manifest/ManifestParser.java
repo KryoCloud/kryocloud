@@ -22,7 +22,7 @@ public final class ManifestParser {
         }
 
         SoftwareType type = SoftwareType.valueOf(string(root, "type").toUpperCase());
-        String latestVersion = string(root, "latestVersion");
+        String latestVersion = optionalString(root, "latestVersion");
         Map<?, ?> rawVersions = map(root, "versions");
         Map<String, SoftwareVersion> versions = new LinkedHashMap<>();
 
@@ -36,7 +36,7 @@ public final class ManifestParser {
             versions.put(version, new SoftwareVersion(version, URI.create(string(versionRoot, "link")), integer(versionRoot, "javaVersion"), stringList(versionRoot, "javaFlags")));
         }
 
-        return new SoftwareManifest(type, latestVersion, versions);
+        return new SoftwareManifest(type, effectiveLatestVersion(latestVersion, versions), versions);
     }
 
     private String stripBom(String value) {
@@ -45,6 +45,24 @@ public final class ManifestParser {
         }
 
         return value;
+    }
+
+    private String effectiveLatestVersion(String latestVersion, Map<String, SoftwareVersion> versions) {
+        if (latestVersion != null && !latestVersion.isBlank() && versions.containsKey(latestVersion)) {
+            return latestVersion;
+        }
+
+        return ManifestVersionComparator.newest(versions.keySet());
+    }
+
+    private String optionalString(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+
+        if (value == null) {
+            return "";
+        }
+
+        return String.valueOf(value).trim();
     }
 
     private String string(Map<?, ?> map, String key) {

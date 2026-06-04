@@ -4,7 +4,9 @@ import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.common.manifest.ManifestClient;
 import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.ManifestRepository;
+import eu.kryocloud.common.manifest.ManifestVersionComparator;
 import eu.kryocloud.common.manifest.SoftwareManifest;
+import eu.kryocloud.common.manifest.SoftwareType;
 import eu.kryocloud.common.manifest.SoftwareVersion;
 
 import java.net.URI;
@@ -19,6 +21,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
 public final class NodeVersionStorage {
@@ -31,6 +35,7 @@ public final class NodeVersionStorage {
     private final ManifestClient manifestClient;
     private final HttpClient httpClient;
     private final Duration timeout;
+    private final ConcurrentMap<String, SoftwareManifest> manifestCache = new ConcurrentHashMap<>();
 
     public NodeVersionStorage(Path rootDirectory, Path templatesDirectory, ManifestRepository manifestRepository, Duration timeout) {
         if (rootDirectory == null) {
@@ -63,8 +68,7 @@ public final class NodeVersionStorage {
         try {
             Files.createDirectories(rootDirectory);
 
-            URI manifestUri = manifestRepository.resolve(software);
-            SoftwareManifest manifest = manifestClient.fetch(manifestUri);
+            SoftwareManifest manifest = manifest(software);
             SoftwareVersion version = manifest.resolve(requestedVersion);
             Path softwareDirectory = softwareDirectory(software);
             Path versionDirectory = versionDirectory(software, version.version());
@@ -210,6 +214,11 @@ public final class NodeVersionStorage {
         return manifestRepository.availableSoftware();
     }
 
+    public List<String> availableSoftware(String serviceType) {
+        SoftwareType expectedType = expectedType(serviceType);
+        return availableSoftware().stream().filter(software -> matchesType(software, expectedType)).toList();
+    }
+
     public List<String> channels() {
         return manifestRepository.channels();
     }
@@ -223,6 +232,7 @@ public final class NodeVersionStorage {
     }
 
     public int refreshManifests() {
+        manifestCache.clear();
         return manifestRepository.refreshFromIndex();
     }
 
@@ -237,9 +247,10 @@ public final class NodeVersionStorage {
 
     public SoftwareManifest manifest(String software) {
         validateSoftware(software);
+        String normalized = software.toLowerCase();
 
         try {
-            return manifestClient.fetch(manifestRepository.resolve(software));
+            return manifestCache.computeIfAbsent(normalized, key -> fetchManifest(key));
         } catch (Exception exception) {
             LOGGER.error("Failed to fetch manifest for " + software + ": " + exception.getMessage(), exception);
             throw new RuntimeException("Failed to fetch manifest for " + software, exception);
@@ -248,7 +259,13 @@ public final class NodeVersionStorage {
 
     public List<String> availableVersions(String software) {
         SoftwareManifest manifest = manifest(software);
-        return manifest.versions().keySet().stream().sorted(Comparator.reverseOrder()).toList();
+        List<String> sortedVersions = ManifestVersionComparator.sortNewestFirst(manifest.versions().keySet());
+
+        if (sortedVersions.isEmpty()) {
+            return List.of(manifest.latestVersion());
+        }
+
+        return Stream.concat(Stream.of(manifest.latestVersion()), sortedVersions.stream().filter(version -> !version.equalsIgnoreCase(manifest.latestVersion()))).distinct().toList();
     }
 
     public Optional<SoftwareVersion> manifestVersion(String software, String version) {
@@ -264,6 +281,31 @@ public final class NodeVersionStorage {
 
     public Path rootDirectory() {
         return rootDirectory;
+    }
+
+    private SoftwareManifest fetchManifest(String software) {
+        try {
+            return manifestClient.fetch(manifestRepository.resolve(software));
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private boolean matchesType(String software, SoftwareType expectedType) {
+        try {
+            return manifest(software).type() == expectedType;
+        } catch (Exception exception) {
+            LOGGER.warn("Failed to check manifest type for " + software + ": " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private SoftwareType expectedType(String serviceType) {
+        if ("PROXY".equalsIgnoreCase(serviceType)) {
+            return SoftwareType.PROXY;
+        }
+
+        return SoftwareType.SERVER;
     }
 
     private VersionImportCandidate candidateFromJar(Path jarFile) {

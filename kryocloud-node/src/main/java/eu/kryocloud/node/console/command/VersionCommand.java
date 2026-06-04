@@ -2,6 +2,7 @@ package eu.kryocloud.node.console.command;
 
 import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.SoftwareManifest;
+import eu.kryocloud.common.manifest.ManifestVersionComparator;
 import eu.kryocloud.common.manifest.SoftwareVersion;
 import eu.kryocloud.node.console.ConsoleCategory;
 import eu.kryocloud.node.console.ConsoleCommand;
@@ -155,7 +156,7 @@ public final class VersionCommand implements ConsoleCommand {
         context.row("Manifest", context.node().versionStorage().manifestSource(software).toString());
         context.print("");
 
-        for (String version : manifest.versions().keySet().stream().sorted(java.util.Comparator.reverseOrder()).toList()) {
+        for (String version : ManifestVersionComparator.sortNewestFirst(manifest.versions().keySet())) {
             SoftwareVersion softwareVersion = manifest.versions().get(version);
             String marker = version.equalsIgnoreCase(manifest.latestVersion()) ? context.good(" latest") : "";
             context.print(" " + ConsoleTheme.bullet() + " " + context.accent(version) + marker + context.muted("  •  Java ") + softwareVersion.javaVersion() + context.muted("  •  ") + softwareVersion.javaFlags().size() + " JVM flag(s)");
