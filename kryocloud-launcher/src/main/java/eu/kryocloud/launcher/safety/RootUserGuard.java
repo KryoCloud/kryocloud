@@ -34,8 +34,8 @@ public final class RootUserGuard {
             return;
         }
 
-        System.err.println("⚠ KryoCloud sollte nicht als root gestartet werden.");
-        System.err.println("⚠ Starte KryoCloud als normaler User, damit Minecraft-Instanzen und Cloud-Dateien keine root-Rechte bekommen.");
+        System.err.println("⚠ WARNING: KryoCloud sollte nicht als root gestartet werden.");
+        System.err.println("✖ ERROR: KryoCloud wurde aus Sicherheitsgründen beendet. Starte die Cloud als normaler User, damit Minecraft-Instanzen und Cloud-Dateien keine root-Rechte bekommen.");
         System.exit(1);
     }
 

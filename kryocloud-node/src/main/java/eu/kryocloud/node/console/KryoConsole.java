@@ -122,13 +122,18 @@ public final class KryoConsole implements AutoCloseable {
     private Terminal createTerminal() throws Exception {
         try {
             TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
-            setBoolean(builder, "jna", true);
+            setString(builder, "provider", "exec");
+            setBoolean(builder, "exec", true);
+            setBoolean(builder, "ffm", false);
+            setBoolean(builder, "jni", false);
+            setBoolean(builder, "jna", false);
             setBoolean(builder, "jansi", false);
             setBoolean(builder, "dumb", false);
             return builder.build();
         } catch (Exception exception) {
             LOGGER.info("Using limited terminal mode: " + exception.getMessage());
             TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
+            setString(builder, "provider", "dumb");
             setBoolean(builder, "dumb", true);
             return builder.build();
         }
@@ -137,6 +142,13 @@ public final class KryoConsole implements AutoCloseable {
     private void setBoolean(TerminalBuilder builder, String method, boolean value) {
         try {
             builder.getClass().getMethod(method, boolean.class).invoke(builder, value);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void setString(TerminalBuilder builder, String method, String value) {
+        try {
+            builder.getClass().getMethod(method, String.class).invoke(builder, value);
         } catch (Exception ignored) {
         }
     }

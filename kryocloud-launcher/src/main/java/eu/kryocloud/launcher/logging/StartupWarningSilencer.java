@@ -16,6 +16,12 @@ public final class StartupWarningSilencer {
         System.setProperty("slf4j.internal.verbosity", "ERROR");
         System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "off");
         System.setProperty("org.jline.terminal.disableDeprecatedProviderWarning", "true");
+        System.setProperty("org.jline.terminal.provider", "exec");
+        System.setProperty("org.jline.terminal.providers", "exec,dumb");
+        System.setProperty("org.jline.terminal.ffm", "false");
+        System.setProperty("org.jline.terminal.jni", "false");
+        System.setProperty("org.jline.terminal.jna", "false");
+        System.setProperty("org.jline.terminal.jansi", "false");
     }
 
     private static void silence(String name) {

@@ -33,13 +33,10 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("it.unimi.dsi", "fastutil", "8.5.18"),
             artifact("org.yaml", "snakeyaml", "2.6"),
             artifact("org.tomlj", "tomlj", "1.1.1"),
-            artifact("org.antlr", "antlr4-runtime", "4.13.2"),
+            artifact("org.antlr", "antlr4-runtime", "4.11.1"),
             artifact("org.json", "json", "20260522"),
-            artifact("org.jline", "jline-reader", "3.30.13"),
-            artifact("org.jline", "jline-terminal", "3.30.13"),
-            artifact("org.jline", "jline-terminal-jna", "3.30.13"),
-            artifact("org.jline", "jline-terminal-ffm", "3.30.13"),
-            artifact("net.java.dev.jna", "jna", "5.18.1"),
+            artifact("org.jline", "jline-reader", "4.1.3"),
+            artifact("org.jline", "jline-terminal", "4.1.3"),
             artifact("org.slf4j", "slf4j-api", "2.0.18"),
             artifact("org.slf4j", "slf4j-nop", "2.0.18"),
             artifact("io.netty", "netty-common", "4.2.10.Final"),
@@ -185,12 +182,11 @@ public final class ClasspathLoader implements AutoCloseable {
         boolean jlineReader = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-reader-"));
         boolean jlineTerminal = classpath.stream().anyMatch(path -> {
             String name = path.getFileName().toString();
-            return name.startsWith("jline-terminal-") && !name.startsWith("jline-terminal-jna-");
+            return name.startsWith("jline-terminal-");
         });
-        boolean jlineJna = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-terminal-jna-"));
         boolean slf4jNop = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("slf4j-nop-"));
 
-        if (!nettyCodecBase || !nettyTransport || !jlineReader || !jlineTerminal || !jlineJna || !slf4jNop) {
+        if (!nettyCodecBase || !nettyTransport || !jlineReader || !jlineTerminal || !slf4jNop) {
             throw new IllegalStateException("Runtime classpath is incomplete. Delete .kryocloud/libs and rebuild KryoCloud.");
         }
     }
@@ -203,7 +199,6 @@ public final class ClasspathLoader implements AutoCloseable {
         Class.forName("io.netty.channel.socket.ChannelInputShutdownReadComplete", false, loader);
         Class.forName("org.jline.reader.LineReader", false, loader);
         Class.forName("org.jline.terminal.TerminalBuilder", false, loader);
-        Class.forName("com.sun.jna.Library", false, loader);
 
         Class<?> nodeType = Class.forName("eu.kryocloud.node.KryoNode", false, loader);
         Class<?> wrapperType = Class.forName("eu.kryocloud.wrapper.KryoWrapper", false, loader);
