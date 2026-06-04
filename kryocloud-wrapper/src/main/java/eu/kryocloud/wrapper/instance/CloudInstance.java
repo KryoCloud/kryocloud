@@ -2,12 +2,17 @@ package eu.kryocloud.wrapper.instance;
 
 import eu.kryocloud.api.instance.ICloudInstance;
 import eu.kryocloud.api.screen.IScreen;
+import eu.kryocloud.sphere.KryoSphereLaunchPlan;
+import eu.kryocloud.sphere.KryoSphereLauncher;
+import eu.kryocloud.sphere.KryoSphereServiceSpec;
 import eu.kryocloud.wrapper.instance.process.InstanceProcessSpec;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class CloudInstance implements ICloudInstance {
+
+    private static final KryoSphereLauncher SPHERE = KryoSphereLauncher.global();
 
     private final InstanceProcessSpec processSpec;
     private final IScreen screen;
@@ -34,6 +39,8 @@ public final class CloudInstance implements ICloudInstance {
         }
 
         Files.createDirectories(workingDirectory().resolve("logs"));
+        Files.createDirectories(workingDirectory().resolve(".kryocloud"));
+        Files.writeString(logFile(), "");
         screen.start(commandLine());
     }
 
@@ -85,33 +92,26 @@ public final class CloudInstance implements ICloudInstance {
     }
 
     private String commandLine() {
-        String args = String.join(" ", processSpec.jvmArgs()).trim();
-        String javaCommand = quote(processSpec.javaExecutable()) + " -Xms" + processSpec.minMemoryMb() + "M -Xmx" + processSpec.maxMemoryMb() + "M -jar " + processSpec.jarName() + " nogui";
-
-        if (!args.isBlank()) {
-            javaCommand = quote(processSpec.javaExecutable()) + " -Xms" + processSpec.minMemoryMb() + "M -Xmx" + processSpec.maxMemoryMb() + "M " + args + " -jar " + processSpec.jarName() + " nogui";
-        }
-
-        if (windows()) {
-            return "if not exist logs mkdir logs && " + javaCommand + " > logs\\kryocloud-instance.log 2>&1 & exit";
-        }
-
-        return "mkdir -p logs && " + javaCommand + " 2>&1 | tee -a logs/kryocloud-instance.log";
-    }
-
-    private String quote(String value) {
-        if (value.contains(" ")) {
-            return "\"" + value + "\"";
-        }
-
-        return value;
+        KryoSphereServiceSpec spec = new KryoSphereServiceSpec(
+                processSpec.name(),
+                processSpec.javaExecutable(),
+                processSpec.workingDirectory(),
+                processSpec.minMemoryMb(),
+                processSpec.maxMemoryMb(),
+                processSpec.jvmArgs(),
+                processSpec.jarName(),
+                logFile(),
+                pidFile()
+        );
+        KryoSphereLaunchPlan plan = SPHERE.plan(spec, processSpec.sphereSettings());
+        return plan.command();
     }
 
     private Path logFile() {
         return workingDirectory().resolve("logs").resolve("kryocloud-instance.log");
     }
 
-    private boolean windows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    private Path pidFile() {
+        return workingDirectory().resolve(".kryocloud").resolve("process.pid");
     }
 }

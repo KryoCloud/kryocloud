@@ -51,29 +51,78 @@ public final class ManifestIndexClient {
             throw new IllegalArgumentException("Manifest index root must be a YAML object");
         }
 
-        Object available = root.get("available");
+        List<String> versions = stringList(root, "versions");
 
-        if (!(available instanceof List<?> rawAvailable)) {
-            throw new IllegalArgumentException("Manifest index key 'available' must be a list");
+        if (versions.isEmpty()) {
+            versions = stringList(root, "available");
         }
 
-        List<String> software = new ArrayList<>();
+        if (versions.isEmpty()) {
+            throw new IllegalArgumentException("Manifest index must contain a 'versions' list");
+        }
 
-        for (Object entry : rawAvailable) {
+        List<String> channels = stringList(root, "channels");
+        List<ManifestCodename> codenames = codenames(root.get("codenames"));
+
+        return new ManifestIndex(source, versions, channels, codenames);
+    }
+
+    private List<ManifestCodename> codenames(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+
+        if (!(value instanceof List<?> rawList)) {
+            throw new IllegalArgumentException("Manifest index key 'codenames' must be a list");
+        }
+
+        List<ManifestCodename> result = new ArrayList<>();
+
+        for (Object entry : rawList) {
+            if (!(entry instanceof Map<?, ?> codenameRoot)) {
+                throw new IllegalArgumentException("Manifest codename entry must be an object");
+            }
+
+            Object rawName = codenameRoot.get("name");
+
+            if (rawName == null || String.valueOf(rawName).isBlank()) {
+                throw new IllegalArgumentException("Manifest codename entry is missing name");
+            }
+
+            result.add(new ManifestCodename(String.valueOf(rawName), stringList(codenameRoot, "versions")));
+        }
+
+        return List.copyOf(result);
+    }
+
+    private List<String> stringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+
+        if (value == null) {
+            return List.of();
+        }
+
+        if (!(value instanceof List<?> rawList)) {
+            throw new IllegalArgumentException("Manifest index key '" + key + "' must be a list");
+        }
+
+        List<String> result = new ArrayList<>();
+
+        for (Object entry : rawList) {
             if (entry == null) {
                 continue;
             }
 
-            String value = String.valueOf(entry).trim();
+            String valueString = String.valueOf(entry).trim();
 
-            if (value.isBlank()) {
+            if (valueString.isBlank()) {
                 continue;
             }
 
-            software.add(value);
+            result.add(valueString);
         }
 
-        return new ManifestIndex(source, software);
+        return List.copyOf(result);
     }
 
     private String stripBom(String value) {

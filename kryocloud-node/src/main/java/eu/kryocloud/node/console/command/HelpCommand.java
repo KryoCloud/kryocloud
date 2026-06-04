@@ -82,7 +82,7 @@ public final class HelpCommand implements ConsoleCommand {
                 line("stats", "show current usage"),
                 line("stats live [seconds]", "animated usage sampling"),
                 line("version list", "show dynamically loaded manifest software"),
-                line("version refresh", "reload software list from versions.yaml"),
+                line("version refresh", "reload software list from manifest.yaml"),
                 line("version <software> list", "show versions from a software manifest"),
                 line("version <software> install [version]", "install a Minecraft server version"),
                 line("service cleanup [wrapper] [--dry-run]", "remove orphaned tmp workspaces")

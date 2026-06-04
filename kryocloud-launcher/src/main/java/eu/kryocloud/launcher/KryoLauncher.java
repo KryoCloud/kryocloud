@@ -33,13 +33,26 @@ public final class KryoLauncher {
     }
 
     private static void launch(LauncherMode mode) throws Exception {
-        try (ClasspathLoader loader = ClasspathLoader.create()) {
-            switch (mode) {
-                case NODE -> launchNode(loader);
-                case WRAPPER -> launchWrapper(loader);
-                case ALL -> launchAll(loader);
-            }
+        requireLinuxHost();
+
+        ClasspathLoader loader = ClasspathLoader.create();
+        Thread.currentThread().setContextClassLoader(loader.classLoader());
+
+        switch (mode) {
+            case NODE -> launchNode(loader);
+            case WRAPPER -> launchWrapper(loader);
+            case ALL -> launchAll(loader);
         }
+    }
+
+    private static void requireLinuxHost() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+
+        if (os.contains("linux")) {
+            return;
+        }
+
+        throw new IllegalStateException("KryoCloud currently supports Linux only. Detected OS: " + System.getProperty("os.name"));
     }
 
     private static void launchNode(ClasspathLoader loader) throws Exception {
@@ -85,7 +98,7 @@ public final class KryoLauncher {
             wrapper.set(wrapperInstance);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> closeAll(loader, wrapper.get(), node.get(), closed), "kryocloud-local-shutdown"));
-            waitWhileRunning(loader, nodeInstance);
+            waitWhileAnyRunning(loader, nodeInstance, wrapperInstance);
         } finally {
             closeAll(loader, wrapper.get(), node.get(), closed);
         }
@@ -93,6 +106,12 @@ public final class KryoLauncher {
 
     private static void waitWhileRunning(ClasspathLoader loader, Object instance) throws Exception {
         while (isRunning(loader, instance)) {
+            LockSupport.parkNanos(Duration.ofMillis(250).toNanos());
+        }
+    }
+
+    private static void waitWhileAnyRunning(ClasspathLoader loader, Object first, Object second) throws Exception {
+        while (isRunning(loader, first) || isRunning(loader, second)) {
             LockSupport.parkNanos(Duration.ofMillis(250).toNanos());
         }
     }
@@ -124,8 +143,8 @@ public final class KryoLauncher {
             return;
         }
 
-        closeQuietly(loader, wrapper);
         closeQuietly(loader, node);
+        closeQuietly(loader, wrapper);
     }
 
     private static void closeQuietly(ClasspathLoader loader, Object instance) {

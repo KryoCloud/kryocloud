@@ -12,11 +12,13 @@ import java.util.concurrent.ConcurrentMap;
 public final class ManifestRepository {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("ManifestRepository");
-    private static final URI DEFAULT_INDEX_URI = URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/versions.yaml");
+    private static final URI DEFAULT_INDEX_URI = URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/manifest.yaml");
     private static final URI DEFAULT_VERSIONS_BASE_URI = URI.create("https://raw.githubusercontent.com/KryoCloud/manifest/master/versions/");
-    private static final List<String> FALLBACK_SOFTWARE = List.of("bungeecord", "flamecord", "folia", "leaf", "minestom", "paper", "purpur", "spigot", "velocity");
+    private static final List<String> FALLBACK_SOFTWARE = List.of("bungeecord", "folia", "leaf", "paper", "purpur", "spigot", "velocity");
 
     private final ConcurrentMap<String, URI> manifests = new ConcurrentHashMap<>();
+    private volatile ManifestIndex index;
+
     private final ManifestIndexClient indexClient;
     private final URI indexUri;
     private final URI versionsBaseUri;
@@ -62,7 +64,10 @@ public final class ManifestRepository {
                 registerOrUpdate(software, manifestUri(software));
             }
 
-            LOGGER.success("Loaded " + index.availableSoftware().size() + " Minecraft software manifest(s) from " + index.source());
+            this.index = index;
+
+            String suffix = index.channels().isEmpty() ? "" : " with " + index.channels().size() + " channel(s)";
+            LOGGER.success("Loaded " + index.availableSoftware().size() + " Minecraft software manifest(s) from " + index.source() + suffix);
             return index.availableSoftware().size();
         } catch (Exception exception) {
             LOGGER.warn("Failed to fetch dynamic manifest index from " + indexUri + ": " + exception.getMessage());
@@ -124,6 +129,36 @@ public final class ManifestRepository {
 
     public List<String> availableSoftware() {
         return manifests.keySet().stream().sorted().toList();
+    }
+
+    public List<String> channels() {
+        ManifestIndex current = index;
+
+        if (current == null) {
+            return List.of();
+        }
+
+        return current.channels();
+    }
+
+    public List<ManifestCodename> codenames() {
+        ManifestIndex current = index;
+
+        if (current == null) {
+            return List.of();
+        }
+
+        return current.codenames();
+    }
+
+    public String latestCodename() {
+        ManifestIndex current = index;
+
+        if (current == null) {
+            return "unknown";
+        }
+
+        return current.latestCodename();
     }
 
     public URI indexUri() {

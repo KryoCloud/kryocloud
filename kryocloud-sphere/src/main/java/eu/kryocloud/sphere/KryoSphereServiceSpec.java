@@ -1,19 +1,23 @@
-package eu.kryocloud.wrapper.instance.process;
-
-import eu.kryocloud.sphere.KryoSphereSettings;
+package eu.kryocloud.sphere;
 
 import java.nio.file.Path;
 import java.util.List;
 
-public record InstanceProcessSpec(String name, String javaExecutable, Path workingDirectory, int minMemoryMb, int maxMemoryMb, List<String> jvmArgs, String jarName, KryoSphereSettings sphereSettings) {
+public record KryoSphereServiceSpec(
+        String serviceId,
+        String javaExecutable,
+        Path workingDirectory,
+        int minMemoryMb,
+        int maxMemoryMb,
+        List<String> jvmArgs,
+        String jarName,
+        Path logFile,
+        Path pidFile
+) {
 
-    public InstanceProcessSpec(String name, String javaExecutable, Path workingDirectory, int minMemoryMb, int maxMemoryMb, List<String> jvmArgs, String jarName) {
-        this(name, javaExecutable, workingDirectory, minMemoryMb, maxMemoryMb, jvmArgs, jarName, KryoSphereSettings.basic());
-    }
-
-    public InstanceProcessSpec {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("name must not be blank");
+    public KryoSphereServiceSpec {
+        if (serviceId == null || serviceId.isBlank()) {
+            throw new IllegalArgumentException("serviceId must not be blank");
         }
 
         if (javaExecutable == null || javaExecutable.isBlank()) {
@@ -40,10 +44,15 @@ public record InstanceProcessSpec(String name, String javaExecutable, Path worki
             throw new IllegalArgumentException("jarName must not be blank");
         }
 
-        if (sphereSettings == null) {
-            sphereSettings = KryoSphereSettings.basic();
+        if (logFile == null) {
+            throw new IllegalArgumentException("logFile must not be null");
+        }
+
+        if (pidFile == null) {
+            throw new IllegalArgumentException("pidFile must not be null");
         }
 
         jvmArgs = List.copyOf(jvmArgs);
     }
+
 }

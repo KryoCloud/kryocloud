@@ -43,6 +43,54 @@ public final class WrapperLaunchConfig extends Config {
     @Comment("Seconds the wrapper waits after sending stop before forcing screen shutdown and deleting temporary workspace")
     private int shutdownTimeoutSeconds = 30;
 
+    @Comment("KryoSphere isolation mode: NONE, BASIC or STRICT")
+    private String kryoSphereMode = "BASIC";
+
+    @Comment("Use bubblewrap when KryoSphere mode is STRICT and bwrap is available")
+    private boolean kryoSphereBubblewrap = true;
+
+    @Comment("Give isolated Linux services a private /tmp when supported")
+    private boolean kryoSpherePrivateTmp = true;
+
+    @Comment("Hide the host home directory from strict Linux service namespaces when supported")
+    private boolean kryoSphereProtectHome = true;
+
+    @Comment("Use a restricted /proc view for strict Linux service namespaces when supported")
+    private boolean kryoSphereRestrictProc = true;
+
+    @Comment("Disallow privilege escalation for future KryoSphere launch backends when supported")
+    private boolean kryoSphereNoNewPrivileges = true;
+
+    @Comment("Optional hard virtual memory limit in MB for services. Use 0 to disable")
+    private int kryoSphereMemoryLimitMb = 0;
+
+    @Comment("Optional CPU limit percent for future KryoSphere launch backends. Use 0 to disable")
+    private int kryoSphereCpuLimitPercent = 0;
+
+    @Comment("Optional open file limit applied before service start. Use 0 to disable")
+    private int kryoSphereOpenFileLimit = 65536;
+
+    @Comment("Optional process limit applied before service start. Use 0 to disable")
+    private int kryoSphereProcessLimit = 0;
+
+    @Comment("Optional service user for future KryoSphere launch backends. Empty keeps current wrapper user")
+    private String kryoSphereServiceUser = "";
+
+    @Comment("Clear inherited environment variables for service processes where possible")
+    private boolean kryoSphereClearEnvironment = true;
+
+    @Comment("Allow inherited host networking. Disable only for services that do not need to bind/connect sockets")
+    private boolean kryoSphereAllowNetwork = true;
+
+    @Comment("Optional tmpfs size in MB for strict private /tmp. Use 0 for bubblewrap default")
+    private int kryoSphereTmpSizeMb = 256;
+
+    @Comment("Comma-separated extra read-only paths exposed to strict KryoSphere services")
+    private String kryoSphereReadOnlyPaths = "";
+
+    @Comment("Comma-separated extra writable paths exposed to strict KryoSphere services")
+    private String kryoSphereWritablePaths = "";
+
     public WrapperLaunchConfig(Path path) {
         super(path);
     }
@@ -142,4 +190,132 @@ public final class WrapperLaunchConfig extends Config {
     public void setShutdownTimeoutSeconds(int shutdownTimeoutSeconds) {
         this.shutdownTimeoutSeconds = shutdownTimeoutSeconds;
     }
+    public String getKryoSphereMode() {
+        return kryoSphereMode;
+    }
+
+    public void setKryoSphereMode(String kryoSphereMode) {
+        this.kryoSphereMode = kryoSphereMode;
+    }
+
+    public boolean isKryoSphereBubblewrap() {
+        return kryoSphereBubblewrap;
+    }
+
+    public void setKryoSphereBubblewrap(boolean kryoSphereBubblewrap) {
+        this.kryoSphereBubblewrap = kryoSphereBubblewrap;
+    }
+
+    public boolean isKryoSpherePrivateTmp() {
+        return kryoSpherePrivateTmp;
+    }
+
+    public void setKryoSpherePrivateTmp(boolean kryoSpherePrivateTmp) {
+        this.kryoSpherePrivateTmp = kryoSpherePrivateTmp;
+    }
+
+    public boolean isKryoSphereProtectHome() {
+        return kryoSphereProtectHome;
+    }
+
+    public void setKryoSphereProtectHome(boolean kryoSphereProtectHome) {
+        this.kryoSphereProtectHome = kryoSphereProtectHome;
+    }
+
+    public boolean isKryoSphereRestrictProc() {
+        return kryoSphereRestrictProc;
+    }
+
+    public void setKryoSphereRestrictProc(boolean kryoSphereRestrictProc) {
+        this.kryoSphereRestrictProc = kryoSphereRestrictProc;
+    }
+
+    public boolean isKryoSphereNoNewPrivileges() {
+        return kryoSphereNoNewPrivileges;
+    }
+
+    public void setKryoSphereNoNewPrivileges(boolean kryoSphereNoNewPrivileges) {
+        this.kryoSphereNoNewPrivileges = kryoSphereNoNewPrivileges;
+    }
+
+    public int getKryoSphereMemoryLimitMb() {
+        return kryoSphereMemoryLimitMb;
+    }
+
+    public void setKryoSphereMemoryLimitMb(int kryoSphereMemoryLimitMb) {
+        this.kryoSphereMemoryLimitMb = kryoSphereMemoryLimitMb;
+    }
+
+    public int getKryoSphereCpuLimitPercent() {
+        return kryoSphereCpuLimitPercent;
+    }
+
+    public void setKryoSphereCpuLimitPercent(int kryoSphereCpuLimitPercent) {
+        this.kryoSphereCpuLimitPercent = kryoSphereCpuLimitPercent;
+    }
+
+    public int getKryoSphereOpenFileLimit() {
+        return kryoSphereOpenFileLimit;
+    }
+
+    public void setKryoSphereOpenFileLimit(int kryoSphereOpenFileLimit) {
+        this.kryoSphereOpenFileLimit = kryoSphereOpenFileLimit;
+    }
+
+    public int getKryoSphereProcessLimit() {
+        return kryoSphereProcessLimit;
+    }
+
+    public void setKryoSphereProcessLimit(int kryoSphereProcessLimit) {
+        this.kryoSphereProcessLimit = kryoSphereProcessLimit;
+    }
+
+    public String getKryoSphereServiceUser() {
+        return kryoSphereServiceUser;
+    }
+
+    public void setKryoSphereServiceUser(String kryoSphereServiceUser) {
+        this.kryoSphereServiceUser = kryoSphereServiceUser;
+    }
+
+    public boolean isKryoSphereClearEnvironment() {
+        return kryoSphereClearEnvironment;
+    }
+
+    public void setKryoSphereClearEnvironment(boolean kryoSphereClearEnvironment) {
+        this.kryoSphereClearEnvironment = kryoSphereClearEnvironment;
+    }
+
+    public boolean isKryoSphereAllowNetwork() {
+        return kryoSphereAllowNetwork;
+    }
+
+    public void setKryoSphereAllowNetwork(boolean kryoSphereAllowNetwork) {
+        this.kryoSphereAllowNetwork = kryoSphereAllowNetwork;
+    }
+
+    public int getKryoSphereTmpSizeMb() {
+        return kryoSphereTmpSizeMb;
+    }
+
+    public void setKryoSphereTmpSizeMb(int kryoSphereTmpSizeMb) {
+        this.kryoSphereTmpSizeMb = kryoSphereTmpSizeMb;
+    }
+
+    public String getKryoSphereReadOnlyPaths() {
+        return kryoSphereReadOnlyPaths;
+    }
+
+    public void setKryoSphereReadOnlyPaths(String kryoSphereReadOnlyPaths) {
+        this.kryoSphereReadOnlyPaths = kryoSphereReadOnlyPaths;
+    }
+
+    public String getKryoSphereWritablePaths() {
+        return kryoSphereWritablePaths;
+    }
+
+    public void setKryoSphereWritablePaths(String kryoSphereWritablePaths) {
+        this.kryoSphereWritablePaths = kryoSphereWritablePaths;
+    }
 }
+

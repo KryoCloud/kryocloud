@@ -23,6 +23,7 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("eu.kryocloud", "kryocloud-api", VERSION),
             artifact("eu.kryocloud", "kryocloud-plugin-api", VERSION),
             artifact("eu.kryocloud", "kryocloud-common", VERSION),
+            artifact("eu.kryocloud", "kryocloud-sphere", VERSION),
             artifact("eu.kryocloud", "kryocloud-network", VERSION),
             artifact("eu.kryocloud", "kryocloud-node", VERSION),
             artifact("eu.kryocloud", "kryocloud-wrapper", VERSION)
@@ -32,7 +33,7 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("it.unimi.dsi", "fastutil", "8.5.18"),
             artifact("org.yaml", "snakeyaml", "2.6"),
             artifact("org.tomlj", "tomlj", "1.1.1"),
-            artifact("org.antlr", "antlr4-runtime", "4.13.2"),
+            artifact("org.antlr", "antlr4-runtime", "4.11.1"),
             artifact("org.json", "json", "20251224"),
             artifact("org.jline", "jline-reader", "3.30.5"),
             artifact("org.jline", "jline-terminal", "3.30.5"),
@@ -86,9 +87,20 @@ public final class ClasspathLoader implements AutoCloseable {
         return new ClasspathLoader(loader);
     }
 
+    public ClassLoader classLoader() {
+        return classLoader;
+    }
+
     public Object create(String className) throws Exception {
-        Class<?> type = Class.forName(className, true, classLoader);
-        return type.getConstructor().newInstance();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(classLoader);
+
+        try {
+            Class<?> type = Class.forName(className, true, classLoader);
+            return type.getConstructor().newInstance();
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
     }
 
     public void invoke(Object instance, String methodName) throws Exception {
@@ -100,13 +112,19 @@ public final class ClasspathLoader implements AutoCloseable {
             return null;
         }
 
-        Method method = instance.getClass().getMethod(methodName);
-        return method.invoke(instance);
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(classLoader);
+
+        try {
+            Method method = instance.getClass().getMethod(methodName);
+            return method.invoke(instance);
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
     }
 
     @Override
-    public void close() throws Exception {
-        classLoader.close();
+    public void close() {
     }
 
     private static java.util.Optional<Path> resolveLocalProjectArtifact(Path projectRoot, Artifact artifact) {
@@ -171,6 +189,10 @@ public final class ClasspathLoader implements AutoCloseable {
 
     private static void validateRuntimeClasses(ClassLoader loader) throws Exception {
         Class.forName("io.netty.handler.codec.LengthFieldBasedFrameDecoder", false, loader);
+        Class.forName("io.netty.util.internal.logging.MessageFormatter", false, loader);
+        Class.forName("io.netty.util.concurrent.DefaultPromise$1", false, loader);
+        Class.forName("io.netty.buffer.FreeChunkEvent", false, loader);
+        Class.forName("io.netty.channel.socket.ChannelInputShutdownReadComplete", false, loader);
         Class.forName("org.jline.reader.LineReader", false, loader);
 
         Class<?> nodeType = Class.forName("eu.kryocloud.node.KryoNode", false, loader);

@@ -2,6 +2,7 @@ package eu.kryocloud.node.version;
 
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.common.manifest.ManifestClient;
+import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.ManifestRepository;
 import eu.kryocloud.common.manifest.SoftwareManifest;
 import eu.kryocloud.common.manifest.SoftwareVersion;
@@ -209,8 +210,24 @@ public final class NodeVersionStorage {
         return manifestRepository.availableSoftware();
     }
 
+    public List<String> channels() {
+        return manifestRepository.channels();
+    }
+
+    public List<ManifestCodename> codenames() {
+        return manifestRepository.codenames();
+    }
+
+    public String latestCodename() {
+        return manifestRepository.latestCodename();
+    }
+
     public int refreshManifests() {
         return manifestRepository.refreshFromIndex();
+    }
+
+    public URI manifestIndexSource() {
+        return manifestRepository.indexUri();
     }
 
     public URI manifestSource(String software) {

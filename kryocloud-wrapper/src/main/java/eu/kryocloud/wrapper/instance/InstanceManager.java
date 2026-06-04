@@ -16,6 +16,7 @@ import eu.kryocloud.network.packet.type.service.ServiceStartRequestPacket;
 import eu.kryocloud.network.packet.type.service.ServiceStatePacket;
 import eu.kryocloud.network.packet.type.service.ServiceStopRequestPacket;
 import eu.kryocloud.network.protocol.CloudServiceState;
+import eu.kryocloud.sphere.KryoSphereSettings;
 import eu.kryocloud.wrapper.instance.metrics.InstanceMetrics;
 import eu.kryocloud.wrapper.instance.metrics.InstanceMetricsCollector;
 import eu.kryocloud.wrapper.instance.process.InstanceProcessSpec;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
@@ -45,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 public final class InstanceManager implements IInstanceManager {
 
     private static final KryoLogger LOGGER = KryoLogger.logger("InstanceManager");
+    private static final String PROCESS_PID_FILE = ".kryocloud/process.pid";
 
     private final String cloudName;
     private final String wrapperId;
@@ -58,13 +61,14 @@ public final class InstanceManager implements IInstanceManager {
     private final Duration shutdownTimeout;
     private final InstanceReadinessProbe readinessProbe;
     private final InstanceMetricsCollector metricsCollector;
+    private final KryoSphereSettings sphereSettings;
     private final ScheduledExecutorService watcherExecutor;
     private final ConcurrentMap<String, ICloudInstance> cloudInstances = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> screenSessions = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, InstanceSnapshot> snapshots = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, KryoConnection> nodeConnections = new ConcurrentHashMap<>();
 
-    public InstanceManager(String cloudName, String wrapperId, String advertisedAddress, String pluginApiHost, int pluginApiPort, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, int startupProbeSeconds, int shutdownTimeoutSeconds) {
+    public InstanceManager(String cloudName, String wrapperId, String advertisedAddress, String pluginApiHost, int pluginApiPort, IScreenManager screenManager, InstanceWorkspace workspace, JavaRuntimeResolver javaRuntimeResolver, KryoSphereSettings sphereSettings, int startupProbeSeconds, int shutdownTimeoutSeconds) {
         if (cloudName == null || cloudName.isBlank()) {
             throw new IllegalArgumentException("cloudName must not be blank");
         }
@@ -101,6 +105,10 @@ public final class InstanceManager implements IInstanceManager {
             throw new IllegalArgumentException("javaRuntimeResolver must not be null");
         }
 
+        if (sphereSettings == null) {
+            throw new IllegalArgumentException("sphereSettings must not be null");
+        }
+
         if (startupProbeSeconds < 1) {
             throw new IllegalArgumentException("startupProbeSeconds must be greater than 0");
         }
@@ -121,6 +129,7 @@ public final class InstanceManager implements IInstanceManager {
         this.shutdownTimeout = Duration.ofSeconds(shutdownTimeoutSeconds);
         this.readinessProbe = new InstanceReadinessProbe(Duration.ofMillis(500));
         this.metricsCollector = new InstanceMetricsCollector();
+        this.sphereSettings = sphereSettings;
         this.watcherExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "kryocloud-instance-watchdog");
             thread.setDaemon(true);
@@ -159,7 +168,7 @@ public final class InstanceManager implements IInstanceManager {
         }
 
         IScreen screen = screenManager.create(screenSession, workingDirectory);
-        InstanceProcessSpec processSpec = new InstanceProcessSpec(serviceId, javaExecutable, workingDirectory, minMemory, maxMemory, jvmArgs, "server.jar");
+        InstanceProcessSpec processSpec = new InstanceProcessSpec(serviceId, javaExecutable, workingDirectory, minMemory, maxMemory, jvmArgs, "server.jar", sphereSettings);
         ICloudInstance instance = new CloudInstance(processSpec, screen);
         ICloudInstance existing = cloudInstances.putIfAbsent(serviceId, instance);
 
@@ -213,7 +222,7 @@ public final class InstanceManager implements IInstanceManager {
             workingDirectory = workspace.prepare(packet);
             JavaRuntime javaRuntime = javaRuntimeResolver.resolve(packet.javaVersion(), workspace.javaVersion(workingDirectory), workspace.javaFlags(workingDirectory));
             writeServiceIdentity(packet, workingDirectory, javaRuntime);
-            sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft instance with Java " + javaRuntime.majorVersion());
+            sendState(nodeConnection, packet, CloudServiceState.STARTING, "Starting Minecraft instance with Java " + javaRuntime.majorVersion() + " using KryoSphere " + sphereSettings.mode());
 
             String screenSession = screenSessionName(packet);
             ICloudInstance instance = create(packet.serviceId(), screenSession, javaRuntime.executable(), workingDirectory, packet.maxMemoryMb(), packet.maxMemoryMb(), finalJvmArgs(packet, javaRuntime.acceptedFlags()));
@@ -598,7 +607,8 @@ public final class InstanceManager implements IInstanceManager {
                 + "  \"onlineMode\": " + packet.onlineMode() + ",\n"
                 + "  \"forwardingMode\": \"" + json(packet.forwardingMode()) + "\",\n"
                 + "  \"forwardingEnabled\": " + packet.forwardingEnabled() + ",\n"
-                + "  \"static\": " + packet.staticService() + "\n"
+                + "  \"static\": " + packet.staticService() + ",\n"
+                + "  \"kryoSphereMode\": \"" + json(sphereSettings.mode()) + "\"\n"
                 + "}\n";
     }
 
@@ -618,13 +628,18 @@ public final class InstanceManager implements IInstanceManager {
     private void stopSnapshot(String serviceId, InstanceSnapshot snapshot, boolean force) {
         try {
             if (force) {
-                unregister(serviceId);
+                forceStopProcessTree(serviceId, snapshot);
                 return;
             }
 
-            gracefulStop(serviceId, snapshot);
+            if (gracefulStop(serviceId, snapshot)) {
+                return;
+            }
+
+            forceStopProcessTree(serviceId, snapshot);
         } catch (Exception exception) {
             LOGGER.warn("Failed while stopping Minecraft instance " + serviceId + ": " + exception.getMessage());
+            forceStopProcessTree(serviceId, snapshot);
         } finally {
             unregister(serviceId);
 
@@ -634,15 +649,96 @@ public final class InstanceManager implements IInstanceManager {
         }
     }
 
-    private void gracefulStop(String serviceId, InstanceSnapshot snapshot) throws Exception {
+    private boolean gracefulStop(String serviceId, InstanceSnapshot snapshot) throws Exception {
         snapshot.instance().stop();
 
         if (waitOffline(snapshot.instance(), shutdownTimeout)) {
+            return true;
+        }
+
+        LOGGER.warn("Minecraft instance " + serviceId + " did not stop within " + shutdownTimeout.toSeconds() + "s. Forcing process shutdown.");
+        return false;
+    }
+
+    private void forceStopProcessTree(String serviceId, InstanceSnapshot snapshot) {
+        Optional<ProcessHandle> process = processHandle(snapshot.workingDirectory());
+
+        if (process.isEmpty()) {
+            LOGGER.warn("No process pid found for Minecraft instance " + serviceId + ". Falling back to screen shutdown.");
             return;
         }
 
-        LOGGER.warn("Minecraft instance " + serviceId + " did not stop within " + shutdownTimeout.toSeconds() + "s. Forcing screen shutdown.");
-        unregister(serviceId);
+        ProcessHandle root = process.get();
+
+        if (!root.isAlive()) {
+            return;
+        }
+
+        List<ProcessHandle> handles = Stream.concat(root.descendants(), Stream.of(root))
+                .sorted(Comparator.comparingLong(ProcessHandle::pid).reversed())
+                .toList();
+
+        for (ProcessHandle handle : handles) {
+            destroy(handle, false);
+        }
+
+        waitForProcesses(handles, Duration.ofSeconds(3));
+
+        for (ProcessHandle handle : handles) {
+            destroy(handle, true);
+        }
+
+        waitForProcesses(handles, Duration.ofSeconds(2));
+    }
+
+    private Optional<ProcessHandle> processHandle(Path workingDirectory) {
+        if (workingDirectory == null) {
+            return Optional.empty();
+        }
+
+        Path pidFile = workingDirectory.resolve(PROCESS_PID_FILE);
+
+        if (!Files.exists(pidFile)) {
+            return Optional.empty();
+        }
+
+        try {
+            String value = Files.readString(pidFile).trim();
+
+            if (value.isBlank()) {
+                return Optional.empty();
+            }
+
+            return ProcessHandle.of(Long.parseLong(value));
+        } catch (Exception exception) {
+            LOGGER.warn("Failed to read Minecraft process pid from " + pidFile + ": " + exception.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private void destroy(ProcessHandle handle, boolean force) {
+        if (handle == null || !handle.isAlive()) {
+            return;
+        }
+
+        if (force) {
+            handle.destroyForcibly();
+            return;
+        }
+
+        handle.destroy();
+    }
+
+    private void waitForProcesses(List<ProcessHandle> handles, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+
+        while (System.currentTimeMillis() <= deadline) {
+            if (handles.stream().noneMatch(ProcessHandle::isAlive)) {
+                return;
+            }
+
+            sleep(100L);
+        }
     }
 
     private boolean waitOffline(ICloudInstance instance, Duration timeout) {

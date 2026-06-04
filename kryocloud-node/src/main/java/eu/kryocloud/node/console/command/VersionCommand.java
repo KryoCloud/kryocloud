@@ -1,5 +1,6 @@
 package eu.kryocloud.node.console.command;
 
+import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.SoftwareManifest;
 import eu.kryocloud.common.manifest.SoftwareVersion;
 import eu.kryocloud.node.console.ConsoleCategory;
@@ -110,9 +111,27 @@ public final class VersionCommand implements ConsoleCommand {
         }
 
         context.header("Minecraft software manifests");
+        context.row("Index", context.node().versionStorage().manifestIndexSource().toString());
+        context.row("Cloud codename", context.node().versionStorage().latestCodename());
+
+        if (!context.node().versionStorage().channels().isEmpty()) {
+            context.row("Channels", String.join(", ", context.node().versionStorage().channels()));
+        }
+
+        if (!context.node().versionStorage().codenames().isEmpty()) {
+            context.print("");
+            context.print("  " + ConsoleTheme.accent("Cloud codenames"));
+
+            for (ManifestCodename codename : context.node().versionStorage().codenames()) {
+                context.print("   " + ConsoleTheme.bullet() + " " + context.accent(codename.name()) + context.muted("  •  ") + String.join(", ", codename.versions()));
+            }
+        }
+
+        context.print("");
+        context.print("  " + ConsoleTheme.accent("Minecraft software"));
 
         for (String entry : software) {
-            context.print(" " + ConsoleTheme.bullet() + " " + context.accent(entry) + context.muted("  •  ") + context.node().versionStorage().manifestSource(entry));
+            context.print("   " + ConsoleTheme.bullet() + " " + context.accent(entry) + context.muted("  •  ") + context.node().versionStorage().manifestSource(entry));
         }
     }
 

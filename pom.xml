@@ -9,12 +9,11 @@
     <version>1.0.0-alpha.1</version>
     <packaging>pom</packaging>
 
-    <name>KryoCloud</name>
-
     <modules>
         <module>kryocloud-api</module>
         <module>kryocloud-plugin-api</module>
         <module>kryocloud-common</module>
+        <module>kryocloud-sphere</module>
         <module>kryocloud-network</module>
         <module>kryocloud-node</module>
         <module>kryocloud-wrapper</module>
@@ -23,10 +22,59 @@
     </modules>
 
     <properties>
-        <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>${java.version}</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <netty.version>4.2.10.Final</netty.version>
+        <jline.version>3.30.5</jline.version>
+        <snakeyaml.version>2.6</snakeyaml.version>
+        <tomlj.version>1.1.1</tomlj.version>
+        <json.version>20251224</json.version>
+        <fastutil.version>8.5.18</fastutil.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>papermc</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>${netty.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline-reader</artifactId>
+                <version>${jline.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>${snakeyaml.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.tomlj</groupId>
+                <artifactId>tomlj</artifactId>
+                <version>${tomlj.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.json</groupId>
+                <artifactId>json</artifactId>
+                <version>${json.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.unimi.dsi</groupId>
+                <artifactId>fastutil</artifactId>
+                <version>${fastutil.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <pluginManagement>

@@ -5,6 +5,7 @@ import eu.kryocloud.api.template.ITemplate;
 import eu.kryocloud.api.plugin.event.network.NetworkCacheChangedEvent;
 import eu.kryocloud.api.plugin.event.network.NetworkChannelMessageEvent;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
+import eu.kryocloud.common.manifest.ManifestCodename;
 import eu.kryocloud.common.manifest.SoftwareManifest;
 import eu.kryocloud.common.manifest.SoftwareVersion;
 import eu.kryocloud.common.logging.KryoLogger;
@@ -939,6 +940,22 @@ public final class NodePluginGateway implements AutoCloseable {
 
         List<String> lines = new ArrayList<>();
         lines.add("Minecraft software manifests:");
+        lines.add("Index: " + versionStorage.manifestIndexSource());
+        lines.add("Cloud codename: " + versionStorage.latestCodename());
+
+        if (!versionStorage.channels().isEmpty()) {
+            lines.add("Channels: " + String.join(", ", versionStorage.channels()));
+        }
+
+        if (!versionStorage.codenames().isEmpty()) {
+            lines.add("Cloud codenames:");
+
+            for (ManifestCodename codename : versionStorage.codenames()) {
+                lines.add("- " + codename.name() + " • " + String.join(", ", codename.versions()));
+            }
+        }
+
+        lines.add("Minecraft software:");
 
         for (String entry : software) {
             lines.add(entry + " • " + versionStorage.manifestSource(entry));

@@ -8,6 +8,8 @@ import eu.kryocloud.common.config.ConfigProvider;
 import eu.kryocloud.common.layout.KryoDirectoryLayout;
 import eu.kryocloud.common.logging.KryoLogger;
 import eu.kryocloud.network.KryoProtocolClient;
+import eu.kryocloud.sphere.KryoSphereMode;
+import eu.kryocloud.sphere.KryoSphereSettings;
 import eu.kryocloud.network.connection.KryoConnection;
 import eu.kryocloud.network.packet.type.wrapper.WrapperRegisterPacket;
 import eu.kryocloud.network.protocol.PeerType;
@@ -22,6 +24,8 @@ import eu.kryocloud.wrapper.screen.ScreenManager;
 
 import java.net.InetAddress;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -53,6 +57,7 @@ public final class KryoWrapper implements IWrapper {
         }
 
         try {
+            requireLinuxHost();
             KryoDirectoryLayout.bootstrap();
             KryoDirectoryLayout.ensureWrapperDirectories();
 
@@ -84,7 +89,7 @@ public final class KryoWrapper implements IWrapper {
             pluginGatewayServer.start();
             int effectivePluginApiPort = pluginGatewayServer.boundPort();
 
-            instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, effectivePluginApiPort, screenManager, workspace, javaRuntimeResolver, launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
+            instanceManager = new InstanceManager(launchConfig.getCloudName(), wrapperId, advertisedAddress, pluginApiHost, effectivePluginApiPort, screenManager, workspace, javaRuntimeResolver, sphereSettings(launchConfig), launchConfig.getStartupProbeSeconds(), launchConfig.getShutdownTimeoutSeconds());
             instancePacketHandlers = new InstancePacketHandlers(instanceManager);
             instancePacketHandlers.register();
 
@@ -151,6 +156,16 @@ public final class KryoWrapper implements IWrapper {
         launchConfig = null;
     }
 
+    private void requireLinuxHost() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+
+        if (os.contains("linux")) {
+            return;
+        }
+
+        throw new IllegalStateException("KryoWrapper currently supports Linux only. Detected OS: " + System.getProperty("os.name"));
+    }
+
     public boolean running() {
         return running.get();
     }
@@ -180,6 +195,38 @@ public final class KryoWrapper implements IWrapper {
         launchConfig.setPluginApiPort(0);
         launchConfig.save();
         LOGGER.info("Migrated legacy pluginApiPort 7070 to auto-bind port 0.");
+    }
+
+    private KryoSphereSettings sphereSettings(WrapperLaunchConfig config) {
+        return new KryoSphereSettings(
+                KryoSphereMode.parse(config.getKryoSphereMode()),
+                config.isKryoSphereBubblewrap(),
+                config.isKryoSpherePrivateTmp(),
+                config.isKryoSphereProtectHome(),
+                config.isKryoSphereRestrictProc(),
+                config.isKryoSphereNoNewPrivileges(),
+                config.isKryoSphereClearEnvironment(),
+                config.isKryoSphereAllowNetwork(),
+                config.getKryoSphereMemoryLimitMb(),
+                config.getKryoSphereCpuLimitPercent(),
+                config.getKryoSphereOpenFileLimit(),
+                config.getKryoSphereProcessLimit(),
+                config.getKryoSphereTmpSizeMb(),
+                config.getKryoSphereServiceUser(),
+                splitPaths(config.getKryoSphereReadOnlyPaths()),
+                splitPaths(config.getKryoSphereWritablePaths())
+        );
+    }
+
+    private List<String> splitPaths(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(path -> !path.isBlank())
+                .toList();
     }
 
     private Path runtimeDirectory(String configuredDirectory) {
