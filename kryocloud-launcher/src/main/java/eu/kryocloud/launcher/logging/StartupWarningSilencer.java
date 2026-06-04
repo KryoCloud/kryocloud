@@ -13,7 +13,7 @@ public final class StartupWarningSilencer {
         silence("org.jline.utils");
         silence("org.antlr");
         silence("org.slf4j");
-        System.setProperty("slf4j.provider", "org.slf4j.nop.NOPServiceProvider");
+        System.setProperty("slf4j.internal.verbosity", "ERROR");
         System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "off");
         System.setProperty("org.jline.terminal.disableDeprecatedProviderWarning", "true");
     }

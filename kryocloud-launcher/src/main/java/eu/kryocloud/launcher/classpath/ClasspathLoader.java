@@ -33,17 +33,15 @@ public final class ClasspathLoader implements AutoCloseable {
             artifact("it.unimi.dsi", "fastutil", "8.5.18"),
             artifact("org.yaml", "snakeyaml", "2.6"),
             artifact("org.tomlj", "tomlj", "1.1.1"),
-            artifact("org.antlr", "antlr4-runtime", "4.11.1"),
-            artifact("org.json", "json", "20251224"),
-            artifact("org.jline", "jline-reader", "3.30.5"),
-            artifact("org.jline", "jline-terminal", "3.30.5"),
-            artifact("org.jline", "jline-terminal-jna", "3.30.5"),
-            artifact("org.jline", "jline-terminal-jansi", "3.30.5"),
-            artifact("org.jline", "jline-terminal-ffm", "3.30.5"),
+            artifact("org.antlr", "antlr4-runtime", "4.13.2"),
+            artifact("org.json", "json", "20260522"),
+            artifact("org.jline", "jline-reader", "3.30.13"),
+            artifact("org.jline", "jline-terminal", "3.30.13"),
+            artifact("org.jline", "jline-terminal-jna", "3.30.13"),
+            artifact("org.jline", "jline-terminal-ffm", "3.30.13"),
             artifact("net.java.dev.jna", "jna", "5.18.1"),
-            artifact("org.fusesource.jansi", "jansi", "2.4.2"),
-            artifact("org.slf4j", "slf4j-api", "2.0.17"),
-            artifact("org.slf4j", "slf4j-nop", "2.0.17"),
+            artifact("org.slf4j", "slf4j-api", "2.0.18"),
+            artifact("org.slf4j", "slf4j-nop", "2.0.18"),
             artifact("io.netty", "netty-common", "4.2.10.Final"),
             artifact("io.netty", "netty-buffer", "4.2.10.Final"),
             artifact("io.netty", "netty-resolver", "4.2.10.Final"),
@@ -187,7 +185,7 @@ public final class ClasspathLoader implements AutoCloseable {
         boolean jlineReader = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-reader-"));
         boolean jlineTerminal = classpath.stream().anyMatch(path -> {
             String name = path.getFileName().toString();
-            return name.startsWith("jline-terminal-") && !name.startsWith("jline-terminal-jna-") && !name.startsWith("jline-terminal-jansi-");
+            return name.startsWith("jline-terminal-") && !name.startsWith("jline-terminal-jna-");
         });
         boolean jlineJna = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("jline-terminal-jna-"));
         boolean slf4jNop = classpath.stream().anyMatch(path -> path.getFileName().toString().startsWith("slf4j-nop-"));
@@ -206,7 +204,6 @@ public final class ClasspathLoader implements AutoCloseable {
         Class.forName("org.jline.reader.LineReader", false, loader);
         Class.forName("org.jline.terminal.TerminalBuilder", false, loader);
         Class.forName("com.sun.jna.Library", false, loader);
-        Class.forName("org.fusesource.jansi.AnsiConsole", false, loader);
 
         Class<?> nodeType = Class.forName("eu.kryocloud.node.KryoNode", false, loader);
         Class<?> wrapperType = Class.forName("eu.kryocloud.wrapper.KryoWrapper", false, loader);

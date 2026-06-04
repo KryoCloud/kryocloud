@@ -14,12 +14,10 @@ public final class CloudHomeSetupWizard {
         KryoDirectoryLayout.bootstrap();
 
         if (KryoDirectoryLayout.hasExternalHome()) {
-            printUsingConfiguredHome();
             return;
         }
 
         if (KryoDirectoryLayout.hasPersistedHomePointer()) {
-            printUsingConfiguredHome();
             return;
         }
 
@@ -40,10 +38,6 @@ public final class CloudHomeSetupWizard {
         System.out.println("Choose where KryoCloud should store config, groups, templates, versions, tmp, static services and .jdk runtimes.");
         System.out.println("The " + KryoDirectoryLayout.homePointer().getFileName() + " pointer will be written to: " + KryoDirectoryLayout.homePointer().toAbsolutePath().normalize());
         System.out.println();
-    }
-
-    private void printUsingConfiguredHome() {
-        System.out.println("❄ KryoCloud home: " + KryoDirectoryLayout.ROOT.toAbsolutePath().normalize() + " (" + KryoDirectoryLayout.homeSource() + ")");
     }
 
     private void printDone(Path root) {

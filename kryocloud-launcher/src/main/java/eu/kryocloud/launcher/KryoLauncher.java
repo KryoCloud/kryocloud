@@ -4,6 +4,7 @@ import eu.kryocloud.launcher.argument.LauncherArguments;
 import eu.kryocloud.launcher.argument.LauncherMode;
 import eu.kryocloud.launcher.classpath.ClasspathLoader;
 import eu.kryocloud.launcher.logging.StartupWarningSilencer;
+import eu.kryocloud.launcher.safety.RootUserGuard;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18,6 +19,7 @@ public final class KryoLauncher {
 
     public static void main(String[] args) {
         StartupWarningSilencer.install();
+        RootUserGuard.abortIfRootUser();
 
         try {
             LauncherArguments arguments = LauncherArguments.parse(args);

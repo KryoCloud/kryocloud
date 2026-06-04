@@ -19,7 +19,9 @@ public final class Downloader {
 
         Path temporary = target.resolveSibling(target.getFileName() + ".part");
 
-        System.out.println("Downloading " + target.getFileName());
+        if (Boolean.getBoolean("kryocloud.launcher.verboseDownloads")) {
+            System.out.println("Downloading " + target.getFileName());
+        }
 
         try (InputStream input = URI.create(url).toURL().openStream()) {
             Files.copy(input, temporary, StandardCopyOption.REPLACE_EXISTING);

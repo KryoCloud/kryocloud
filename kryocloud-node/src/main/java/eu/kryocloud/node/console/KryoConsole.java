@@ -123,7 +123,7 @@ public final class KryoConsole implements AutoCloseable {
         try {
             TerminalBuilder builder = TerminalBuilder.builder().system(true).nativeSignals(false);
             setBoolean(builder, "jna", true);
-            setBoolean(builder, "jansi", true);
+            setBoolean(builder, "jansi", false);
             setBoolean(builder, "dumb", false);
             return builder.build();
         } catch (Exception exception) {
